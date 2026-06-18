@@ -1,0 +1,57 @@
+name: Deploy to GitHub Pages
+
+# Publishes the game as a static site. Works from this feature branch now,
+# and keeps working after a merge to master/main.
+on:
+  push:
+    branches:
+      - master
+      - main
+      - claude/determined-allen-imh8wa
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow one concurrent deployment; newest push wins.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true   # auto-enable Pages if it isn't already
+
+      - name: Assemble site (drop .git + heavy unused vector sources)
+        run: |
+          mkdir -p _site
+          rsync -a \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='_site' \
+            --exclude='*.ai' \
+            --exclude='*.cdr' \
+            --exclude='*.eps' \
+            ./ _site/
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
