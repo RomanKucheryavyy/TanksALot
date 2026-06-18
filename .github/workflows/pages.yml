@@ -1,7 +1,9 @@
 name: Deploy to GitHub Pages
 
-# Publishes the game as a static site. Works from this feature branch now,
-# and keeps working after a merge to master/main.
+# Publishes the static game by pushing it to the `gh-pages` branch. This
+# classic approach works from a fork and from a non-default branch (no
+# github-pages environment gate). After the first successful run, set
+# Settings -> Pages -> "Deploy from a branch" -> gh-pages / root.
 on:
   push:
     branches:
@@ -11,29 +13,18 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
-# Allow one concurrent deployment; newest push wins.
 concurrency:
-  group: pages
+  group: pages-deploy
   cancel-in-progress: true
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
-        with:
-          enablement: true   # auto-enable Pages if it isn't already
 
       - name: Assemble site (drop .git + heavy unused vector sources)
         run: |
@@ -46,12 +37,17 @@ jobs:
             --exclude='*.cdr' \
             --exclude='*.eps' \
             ./ _site/
+          touch _site/.nojekyll   # serve files as-is (no Jekyll processing)
 
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: _site
-
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+      - name: Publish to gh-pages branch
+        run: |
+          cd _site
+          git init -q
+          git checkout -q -b gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Deploy ${GITHUB_SHA} to GitHub Pages"
+          git push -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" gh-pages:gh-pages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
