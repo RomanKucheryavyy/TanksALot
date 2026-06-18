@@ -1,30 +1,144 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-    <meta charset="UTF-8" />
-    <title>Game</title>
-    <link rel="stylesheet" href="game.css" />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>TanksALot — Top-Down Tank Survival</title>
+  <link rel="stylesheet" href="css/style.css" />
 </head>
-
 <body>
-    <div>
-        <p class="title">LET'S GET TANKED!</p>
-        <a href="game.html?level=1">Easy</a>
-        <a href="game.html?level=2">Medium</a>
-        <a href="game.html?level=3">Expert</a>
-        <a href="game.html?level=4">God Mode</a>
-        <a href="Introduction.html">Tutorial</a>
-        <!-- <a value=  "window.close()">Exit</a> -->
+  <div id="stage">
+    <canvas id="game" width="1280" height="720" tabindex="0"></canvas>
+
+    <!-- ============================== HUD ============================== -->
+    <div id="hud" class="hidden">
+      <div class="hud-top">
+        <div class="panel hud-left">
+          <div class="hp-row">
+            <span class="hp-label">HP</span>
+            <div id="hp-bar"><div id="hp-fill"></div><div id="hp-text">100 / 100</div></div>
+          </div>
+          <div id="stat-lives">❤ ❤ ❤</div>
+          <div id="buffs"></div>
+        </div>
+
+        <div class="panel hud-center">
+          <div class="big">WAVE <span id="stat-wave">1</span></div>
+          <div class="sub">Enemies left: <span id="stat-enemies">0</span></div>
+        </div>
+
+        <div class="hud-right">
+          <div class="panel">
+            <div class="score-label">SCORE</div>
+            <div id="stat-score">0</div>
+          </div>
+          <canvas id="minimap" width="150" height="150"></canvas>
+        </div>
+      </div>
+
+      <div id="combo">COMBO x2</div>
+      <div id="wave-banner"></div>
     </div>
 
-    <script type="text/javascript">
-        function to(){  
-            var getval ="valueTest";
-            window.location.href="b.html?valus="+getval;  
-        } 
-        </script>
-</body>
+    <!-- ============================ MENU ============================== -->
+    <div id="overlay-menu" class="overlay hidden">
+      <div class="title">TANKS<span class="alt"> A </span>LOT</div>
+      <div class="subtitle">TOP-DOWN TANK SURVIVAL</div>
 
+      <div class="card">
+        <div class="group-label">DIFFICULTY</div>
+        <div class="pills">
+          <button class="pill" data-diff="easy">Easy</button>
+          <button class="pill" data-diff="normal">Normal</button>
+          <button class="pill" data-diff="hard">Hard</button>
+          <button class="pill" data-diff="insane">Insane</button>
+        </div>
+
+        <div class="group-label">BATTLEFIELD</div>
+        <div class="pills">
+          <button class="pill" data-theme="forest">🌲 Forest</button>
+          <button class="pill" data-theme="desert">🏜️ Desert</button>
+        </div>
+
+        <div class="btn-row" style="margin: 6px 0 16px;">
+          <button id="btn-play" class="btn">▶ PLAY</button>
+        </div>
+
+        <div class="controls">
+          <b>Move</b> <span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span>
+          &nbsp;•&nbsp; <b>Aim</b> Mouse &nbsp;•&nbsp; <b>Fire</b> Left-click / <span class="key">Space</span>
+          &nbsp;•&nbsp; <b>Pause</b> <span class="key">Esc</span><br />
+          Survive the waves, grab power-ups, and rack up combo kills.
+        </div>
+      </div>
+
+      <div class="stats-row">
+        <div class="stat-box"><div class="v" id="menu-high">0</div><div class="l">HIGH SCORE</div></div>
+        <div class="stat-box"><div class="v" id="menu-bestwave">0</div><div class="l">BEST WAVE</div></div>
+      </div>
+
+      <div class="bottom-row">
+        <button class="btn-mute">🔊 Sound On</button>
+      </div>
+      <div class="credit">A complete rework of the TCSS-491 "Tank's Alot" project.</div>
+    </div>
+
+    <!-- ============================ PAUSE ============================= -->
+    <div id="overlay-pause" class="overlay hidden">
+      <div class="over-title">PAUSED</div>
+      <div class="card">
+        <div class="controls" style="margin-bottom: 18px;">
+          <b>Move</b> <span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span>
+          &nbsp;•&nbsp; <b>Aim</b> Mouse &nbsp;•&nbsp; <b>Fire</b> Left-click / <span class="key">Space</span>
+        </div>
+        <div class="btn-row">
+          <button id="btn-resume" class="btn">▶ RESUME</button>
+          <button id="btn-restart" class="btn secondary">↻ Restart</button>
+          <button id="btn-quit" class="btn secondary">✕ Quit to Menu</button>
+        </div>
+        <div class="bottom-row" style="margin-top: 16px;">
+          <button class="btn-mute">🔊 Sound On</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========================== GAME OVER ========================== -->
+    <div id="overlay-gameover" class="overlay hidden">
+      <div class="over-title lose">GAME OVER</div>
+      <div class="card">
+        <div class="stats-row">
+          <div class="stat-box"><div class="v" id="go-score">0</div><div class="l">SCORE</div></div>
+          <div class="stat-box"><div class="v" id="go-wave">0</div><div class="l">WAVE REACHED</div></div>
+          <div class="stat-box"><div class="v" id="go-high">0</div><div class="l">HIGH SCORE</div></div>
+        </div>
+        <div class="btn-row" style="margin-top: 18px;">
+          <button id="btn-retry" class="btn">↻ RETRY</button>
+          <button id="btn-menu" class="btn secondary">Main Menu</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- =========================== VICTORY =========================== -->
+    <div id="overlay-victory" class="overlay hidden">
+      <div class="over-title win">VICTORY!</div>
+      <div class="subtitle">You destroyed the final boss and cleared all 20 waves.</div>
+      <div class="card">
+        <div class="stats-row">
+          <div class="stat-box"><div class="v" id="vic-score">0</div><div class="l">SCORE</div></div>
+          <div class="stat-box"><div class="v" id="vic-high">0</div><div class="l">HIGH SCORE</div></div>
+        </div>
+        <div class="btn-row" style="margin-top: 18px;">
+          <button id="btn-vic-continue" class="btn">⤴ Endless Mode</button>
+          <button id="btn-vic-menu" class="btn secondary">Main Menu</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- load order matters: engine → entities → world → game -->
+  <script src="js/engine.js"></script>
+  <script src="js/entities.js"></script>
+  <script src="js/world.js"></script>
+  <script src="js/game.js"></script>
+</body>
 </html>
