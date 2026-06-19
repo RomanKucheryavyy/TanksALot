@@ -43,6 +43,11 @@ class Input {
     this.rightDown = false;     // right (ability)
     this.rightPressed = false;
     this.wheel = 0;             // accumulated wheel delta (weapon switch)
+    // virtual / mobile control state (driven by on-screen joysticks)
+    this.move = { x: 0, y: 0 }; // left stick (movement)
+    this.aimVec = { x: 0, y: 0 }; // right stick (aim)
+    this.aimActive = false;     // right stick engaged
+    this.firing = false;        // touch fire held
     this._bind();
   }
   _bind() {
@@ -67,16 +72,11 @@ class Input {
     window.addEventListener('mouseup', (e) => { if (e.button === 0) this.mouseDown = false; if (e.button === 2) this.rightDown = false; });
     c.addEventListener('contextmenu', (e) => e.preventDefault());
     c.addEventListener('wheel', (e) => { e.preventDefault(); this.wheel += Math.sign(e.deltaY); }, { passive: false });
-    c.addEventListener('touchstart', (e) => { e.preventDefault(); this._touch(e); this.mouseDown = true; }, { passive: false });
-    c.addEventListener('touchmove', (e) => { e.preventDefault(); this._touch(e); }, { passive: false });
-    c.addEventListener('touchend', (e) => { e.preventDefault(); this.mouseDown = false; }, { passive: false });
-    window.addEventListener('blur', () => { this.keys = Object.create(null); this.mouseDown = false; this.rightDown = false; });
-  }
-  _touch(e) {
-    if (!e.touches.length) return;
-    const t = e.touches[0], r = this.canvas.getBoundingClientRect();
-    this.mouse.x = (t.clientX - r.left) * (this.canvas.width / r.width);
-    this.mouse.y = (t.clientY - r.top) * (this.canvas.height / r.height);
+    // Touches on the bare canvas just prevent page scroll/zoom; the on-screen
+    // joysticks (MobileControls) own their own elements and drive move/aim/fire.
+    c.addEventListener('touchstart', (e) => e.preventDefault(), { passive: false });
+    c.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
+    window.addEventListener('blur', () => { this.keys = Object.create(null); this.mouseDown = false; this.rightDown = false; this.firing = false; this.move.x = this.move.y = 0; this.aimActive = false; });
   }
   down(code) { return !!this.keys[code]; }
   justPressed(code) { return !!this.pressed[code]; }
@@ -175,6 +175,16 @@ class AudioManager {
   lowHealth() { this.tone({ freq: 160, type: 'sine', dur: 0.16, vol: 0.18 }); }
   gameover() { [400, 340, 280, 200].forEach((f, i) => this.tone({ freq: f, type: 'sawtooth', dur: 0.3, vol: 0.22, delay: i * 0.18 })); }
   victory() { [523, 659, 784, 1046, 1318].forEach((f, i) => this.tone({ freq: f, type: 'triangle', dur: 0.22, vol: 0.28, delay: i * 0.14 })); }
+  fireFlame() { this.noise({ dur: 0.16, vol: 0.07, cutoff: 1100 }); }
+  fireRail() { this.tone({ freq: 200, type: 'sawtooth', dur: 0.12, vol: 0.1, glide: 1400 }); this.tone({ freq: 1400, type: 'square', dur: 0.18, vol: 0.16, glide: -1100, delay: 0.1 }); this.noise({ dur: 0.2, vol: 0.12, cutoff: 3000 }); }
+  fireTesla() { this.tone({ freq: 1800, type: 'square', dur: 0.1, vol: 0.09, glide: -900 }); this.noise({ dur: 0.12, vol: 0.06, cutoff: 4000, type: 'highpass' }); }
+  fireGrenade() { this.tone({ freq: 150, type: 'square', dur: 0.1, vol: 0.12, glide: -60 }); }
+  ability() { this.tone({ freq: 420, type: 'sawtooth', dur: 0.22, vol: 0.14, glide: 300 }); this.noise({ dur: 0.2, vol: 0.08, cutoff: 1600 }); }
+  shockwave() { this.tone({ freq: 120, type: 'sine', dur: 0.4, vol: 0.28, glide: -70 }); this.noise({ dur: 0.4, vol: 0.2, cutoff: 1400 }); }
+  ultimate() { [330, 440, 587, 880].forEach((f, i) => this.tone({ freq: f, type: 'sawtooth', dur: 0.5, vol: 0.18, delay: i * 0.07, glide: 60 })); this.noise({ dur: 0.6, vol: 0.2, cutoff: 2200, delay: 0.25 }); }
+  freeze() { this.tone({ freq: 1200, type: 'triangle', dur: 0.3, vol: 0.12, glide: -700 }); }
+  elite() { this.tone({ freq: 90, type: 'sawtooth', dur: 0.6, vol: 0.2, glide: -30 }); }
+  levelUp() { [523, 698, 880, 1175].forEach((f, i) => this.tone({ freq: f, type: 'triangle', dur: 0.18, vol: 0.22, delay: i * 0.07 })); }
 
   startMusic(src) {
     if (this._musicStarted) return;
