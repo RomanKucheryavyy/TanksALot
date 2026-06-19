@@ -41,7 +41,28 @@ class Game {
 
     this._reset(); this._queueAssets(); this._bindUI();
     this.mobile = new MobileControls(this);
+    this.stage = document.getElementById('stage');
+    this._resize();
+    window.addEventListener('resize', () => this._resize());
+    window.addEventListener('orientationchange', () => setTimeout(() => this._resize(), 250));
+    document.addEventListener('visibilitychange', () => { if (typeof document !== 'undefined' && document.hidden && this.state === STATE.PLAYING) this.pause(); });
     this._lastTime = performance.now(); this.toasts = [];
+  }
+
+  // Fit the canvas to the whole viewport (any orientation) at a consistent
+  // world-scale, and resize the offscreen light buffer to match.
+  _resize() {
+    const dpr = Math.min((typeof window !== 'undefined' && window.devicePixelRatio) || 1, 2);
+    const rect = this.stage ? this.stage.getBoundingClientRect() : { width: 1280, height: 720 };
+    let w = Math.max(480, Math.round((rect.width || 1280) * dpr));
+    let h = Math.max(320, Math.round((rect.height || 720) * dpr));
+    const maxDim = 2000, sc = Math.min(1, maxDim / Math.max(w, h)); // cap so the view never exceeds the world
+    w = Math.round(w * sc); h = Math.round(h * sc);
+    this.canvas.width = w; this.canvas.height = h;
+    this._lightCanvas.width = w; this._lightCanvas.height = h;
+    this.camera.resize(w, h);
+    const z = Util.clamp(Math.min(w, h) / 640, 0.6, 2.6); // same comfortable world-area on phone or desktop
+    this.camera.zoom = this.camera.targetZoom = z;
   }
 
   _reset() {
@@ -128,7 +149,7 @@ class Game {
     this._reset(); Storage.set('difficulty', this.difficulty); Storage.set('theme', this.theme);
     const d = DIFFICULTIES[this.difficulty]; this.lives = d.lives;
     const size = 2600; this.world = new World(this, size, size, this.theme);
-    this.camera.setWorld(size, size); this.camera.zoom = 1; this.camera.targetZoom = 1; this.camera.x = size / 2 - this.canvas.width / 2; this.camera.y = size / 2 - this.canvas.height / 2;
+    this.camera.setWorld(size, size); this.camera.x = size / 2 - this.camera.vw / 2; this.camera.y = size / 2 - this.camera.vh / 2;
     this.player = new PlayerTank(this, size / 2, size / 2); this._lastPlayerHp = this.player.hp;
     this.obstacles = this.world.generateObstacles(38, this.player.x, this.player.y);
     this.world.generateHazards(this.theme === 'arctic' ? 3 : 4, this.player.x, this.player.y); this.world.generateDecor(120);
@@ -270,7 +291,8 @@ class Game {
     lx.globalCompositeOperation = 'lighter'; lx.save(); this.camera.apply(lx);
     const L = (x, y, r, color) => { if (!this.camera.visible(x, y, r)) return; const g = lx.createRadialGradient(x, y, 0, x, y, r); g.addColorStop(0, color); g.addColorStop(1, 'rgba(0,0,0,0)'); lx.fillStyle = g; lx.fillRect(x - r, y - r, r * 2, r * 2); };
     const p = this.player; if (p && p.alive) L(p.x, p.y, 200, 'rgba(150,180,220,0.7)');
-    for (const b of this.bullets) L(b.x, b.y, b.kind === 'rocket' ? 80 : 50, b.team === 'player' ? 'rgba(255,210,120,0.8)' : 'rgba(255,110,90,0.7)');
+    const bcap = Math.min(this.bullets.length, 70); // cap bullet lights for perf on weaker devices
+    for (let i = 0; i < bcap; i++) { const b = this.bullets[i]; L(b.x, b.y, b.kind === 'rocket' ? 80 : 50, b.team === 'player' ? 'rgba(255,210,120,0.8)' : 'rgba(255,110,90,0.7)'); }
     for (const e of this.explosions) { const t = 1 - e.time / e.dur; L(e.x, e.y, 170 * e.scale * t + 40, `rgba(255,180,90,${0.9 * t})`); }
     for (const pu of this.powerups) L(pu.x, pu.y, 80, POWERUP_TYPES[pu.type].color);
     for (const hz of this.world.hazards) if (hz.dmg) L(hz.x, hz.y, hz.r * 1.7, hz.type === 'energy' ? 'rgba(160,100,255,0.6)' : 'rgba(255,120,40,0.6)');
@@ -399,32 +421,40 @@ class MobileControls {
     btn('btn-pause-m', () => { if (this.game.state === 'playing') this.game.pause(); else if (this.game.state === 'paused') this.game.resume(); });
   }
   _r() { return document.getElementById('stage').getBoundingClientRect(); }
+  // Fixed, always-visible thumbsticks anchored in the bottom corners. A touch
+  // in the left half drives the move stick; the right half drives aim & fire.
   _start(e) {
+    if (this.game.state !== 'playing') return;
     const r = this._r();
     for (const t of e.changedTouches) {
       const lx = t.clientX - r.left;
-      if (lx < r.width * 0.5 && this.moveId === null) { this.moveId = t.identifier; this._mo = { x: t.clientX, y: t.clientY }; this._place(this.moveBase, lx, t.clientY - r.top); }
-      else if (lx >= r.width * 0.5 && this.aimId === null) { this.aimId = t.identifier; this._ao = { x: t.clientX, y: t.clientY }; this.input.aimActive = true; this.input.firing = true; this._place(this.aimBase, lx, t.clientY - r.top); }
+      if (lx < r.width * 0.5 && this.moveId === null) { this.moveId = t.identifier; this._apply(t, 'move'); }
+      else if (lx >= r.width * 0.5 && this.aimId === null) { this.aimId = t.identifier; this.input.aimActive = true; this.input.firing = true; this._apply(t, 'aim'); }
     }
     if (this.moveId !== null || this.aimId !== null) e.preventDefault();
   }
   _move(e) {
     for (const t of e.changedTouches) {
-      if (t.identifier === this.moveId) { const v = this._delta(this._mo, t); this.input.move.x = v.x; this.input.move.y = v.y; this._knob(this.moveKnob, v); }
-      else if (t.identifier === this.aimId) { const v = this._delta(this._ao, t); if (Math.hypot(v.x, v.y) > 0.18) { this.input.aimVec.x = v.x; this.input.aimVec.y = v.y; } this._knob(this.aimKnob, v); }
+      if (t.identifier === this.moveId) this._apply(t, 'move');
+      else if (t.identifier === this.aimId) this._apply(t, 'aim');
     }
-    e.preventDefault();
+    if (this.moveId !== null || this.aimId !== null) e.preventDefault();
   }
   _end(e) {
     for (const t of e.changedTouches) {
-      if (t.identifier === this.moveId) { this.moveId = null; this.input.move.x = 0; this.input.move.y = 0; this._hide(this.moveBase); }
-      else if (t.identifier === this.aimId) { this.aimId = null; this.input.aimActive = false; this.input.firing = false; this._hide(this.aimBase); }
+      if (t.identifier === this.moveId) { this.moveId = null; this.input.move.x = 0; this.input.move.y = 0; this._center(this.moveKnob); }
+      else if (t.identifier === this.aimId) { this.aimId = null; this.input.aimActive = false; this.input.firing = false; this._center(this.aimKnob); }
     }
   }
-  _delta(o, t) { let dx = t.clientX - o.x, dy = t.clientY - o.y; const max = 56, d = Math.hypot(dx, dy); if (d > max) { dx = dx / d * max; dy = dy / d * max; } return { x: dx / max, y: dy / max }; }
-  _place(base, x, y) { if (!base) return; base.style.display = 'block'; base.style.left = x + 'px'; base.style.top = y + 'px'; }
-  _knob(knob, v) { if (knob) knob.style.transform = `translate(calc(-50% + ${v.x * 38}px), calc(-50% + ${v.y * 38}px))`; }
-  _hide(base) { if (base) base.style.display = 'none'; }
+  _apply(t, which) {
+    const base = which === 'move' ? this.moveBase : this.aimBase, knob = which === 'move' ? this.moveKnob : this.aimKnob;
+    if (!base) return; const r = base.getBoundingClientRect(); const cx = r.left + r.width / 2, cy = r.top + r.height / 2, max = r.width / 2 - 6;
+    let dx = t.clientX - cx, dy = t.clientY - cy; const d = Math.hypot(dx, dy) || 0.0001; const ux = dx / d, uy = dy / d; const mag = Math.min(d / max, 1);
+    if (which === 'move') { this.input.move.x = ux * mag; this.input.move.y = uy * mag; }
+    else if (mag > 0.2) { this.input.aimVec.x = ux; this.input.aimVec.y = uy; }
+    const kd = Math.min(d, max); if (knob) knob.style.transform = `translate(calc(-50% + ${ux * kd}px), calc(-50% + ${uy * kd}px))`;
+  }
+  _center(knob) { if (knob) knob.style.transform = 'translate(-50%, -50%)'; }
 }
 
 window.addEventListener('load', () => { const canvas = document.getElementById('game'); const game = new Game(canvas); window.GAME = game; game.start(); });
