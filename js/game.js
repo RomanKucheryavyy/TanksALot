@@ -23,6 +23,8 @@ const ACHIEVEMENTS = [
   { id: 'untouchable', name: 'Untouchable', desc: 'Clear a wave unscathed' },
   { id: 'ultimate', name: 'Overkill', desc: 'Unleash your ultimate' },
   { id: 'elite', name: 'Elite Hunter', desc: 'Destroy an elite enemy' },
+  { id: 'wave15', name: 'Warbound', desc: 'Reach wave 15' },
+  { id: 'skinned', name: 'Fresh Paint', desc: 'Equip a new tank skin' },
 ];
 
 class Game {
@@ -36,7 +38,7 @@ class Game {
     this.state = STATE.LOADING; this.time = 0; this.timeScale = 1; this._slowmo = 0; this._hitstop = 0; this.fps = 60;
     this.difficulty = Storage.get('difficulty', 'normal'); this.theme = Storage.get('theme', 'forest');
     this.highScore = Storage.get('highscore', 0); this.bestWave = Storage.get('bestwave', 0); this.totalCoins = Storage.get('totalCoins', 0);
-    this.achievements = new Set(Storage.get('achievements', []));
+    this.achievements = new Set(Storage.get('achievements', [])); this.skin = Storage.get('skin', 'default');
     this.settings = { shake: Storage.get('shake', true), weather: Storage.get('weather', true), lighting: Storage.get('lighting', true), flash: Storage.get('flash', true), fps: Storage.get('fps', false) };
 
     this._reset(); this._queueAssets(); this._bindUI();
@@ -68,7 +70,7 @@ class Game {
   _reset() {
     this.world = null; this.player = null;
     this.enemies = []; this.bullets = []; this.particles = []; this.treadMarks = []; this.explosions = []; this.powerups = []; this.coins = []; this.crates = [];
-    this.obstacles = []; this.floatingTexts = []; this.decals = []; this.casings = []; this.afterImages = []; this.debris = []; this.beams = []; this.lightnings = []; this.shockwaves = [];
+    this.obstacles = []; this.floatingTexts = []; this.decals = []; this.casings = []; this.afterImages = []; this.debris = []; this.beams = []; this.lightnings = []; this.shockwaves = []; this.strikes = [];
     this.spawnQueue = []; this.spawnTimer = 0;
     this.wave = 0; this.score = 0; this.combo = 0; this.comboTimer = 0; this.maxCombo = 0;
     this.lives = 3; this.coinCount = 0; this.intermission = 0; this.respawnTimer = 0; this.powerupTimer = Util.rand(8, 14);
@@ -110,7 +112,7 @@ class Game {
     if (p && p.alive) { p.update(dt); this.world.affect(p, dt); }
     for (const e of this.enemies) { e.update(dt); this.world.affect(e, dt); }
     for (const o of this.obstacles) o.update(dt);
-    for (const arr of [this.bullets, this.particles, this.treadMarks, this.explosions, this.powerups, this.coins, this.crates, this.floatingTexts, this.decals, this.casings, this.afterImages, this.debris, this.beams, this.lightnings, this.shockwaves]) for (const o of arr) o.update(dt);
+    for (const arr of [this.bullets, this.particles, this.treadMarks, this.explosions, this.powerups, this.coins, this.crates, this.floatingTexts, this.decals, this.casings, this.afterImages, this.debris, this.beams, this.lightnings, this.shockwaves, this.strikes]) for (const o of arr) o.update(dt);
 
     if (p && p.alive && p.thorns > 0) for (const e of this.enemies) { if (e.alive && Util.dist(p.x, p.y, e.x, e.y) < p.radius + e.radius + 6) e.takeDamage(p.thorns * dt, Util.angleTo(p.x, p.y, e.x, e.y), true, {}); }
     if (p && p.alive) {
@@ -125,7 +127,7 @@ class Game {
     this.explosions = this.explosions.filter((x) => !x.dead); this.powerups = this.powerups.filter((x) => !x.dead); this.coins = this.coins.filter((x) => !x.dead);
     this.crates = this.crates.filter((x) => !x.dead); this.floatingTexts = this.floatingTexts.filter((x) => !x.dead); this.obstacles = this.obstacles.filter((o) => !o.dead);
     this.decals = this.decals.filter((d) => !d.dead); this.casings = this.casings.filter((c) => !c.dead); this.afterImages = this.afterImages.filter((a) => !a.dead);
-    this.debris = this.debris.filter((d) => !d.dead); this.beams = this.beams.filter((b) => !b.dead); this.lightnings = this.lightnings.filter((l) => !l.dead); this.shockwaves = this.shockwaves.filter((s) => !s.dead);
+    this.debris = this.debris.filter((d) => !d.dead); this.beams = this.beams.filter((b) => !b.dead); this.lightnings = this.lightnings.filter((l) => !l.dead); this.shockwaves = this.shockwaves.filter((s) => !s.dead); this.strikes = this.strikes.filter((s) => !s.dead);
     for (const kf of this.killfeed) kf.life -= dt; this.killfeed = this.killfeed.filter((k) => k.life > 0);
 
     if (this.combo > 0) { this.comboTimer -= dt; if (this.comboTimer <= 0) this.combo = 0; }
@@ -150,7 +152,7 @@ class Game {
     const d = DIFFICULTIES[this.difficulty]; this.lives = d.lives;
     const size = 2600; this.world = new World(this, size, size, this.theme);
     this.camera.setWorld(size, size); this.camera.x = size / 2 - this.camera.vw / 2; this.camera.y = size / 2 - this.camera.vh / 2;
-    this.player = new PlayerTank(this, size / 2, size / 2); this._lastPlayerHp = this.player.hp;
+    this.player = new PlayerTank(this, size / 2, size / 2); this.player.palette = this._skinPalette(); this._lastPlayerHp = this.player.hp;
     this.obstacles = this.world.generateObstacles(38, this.player.x, this.player.y);
     this.world.generateHazards(this.theme === 'arctic' ? 3 : 4, this.player.x, this.player.y); this.world.generateDecor(120);
     this.state = STATE.PLAYING; this._hideOverlays(); this.audio.startMusic('Sounds/BGM.mp3'); this._spawnWave(1);
@@ -163,11 +165,16 @@ class Game {
     if (wbw[n] && this.player) { const s = this.world.randomSpawn(120); this.crates.push(new WeaponCrate(this, s.x, s.y, wbw[n])); }
     this.spawnQueue = queue; this.spawnTimer = 0.2; this.audio.wave(); this.audio.setMusicIntensity(this.bossWave);
     if (n > this.bestWave) { this.bestWave = n; Storage.set('bestwave', n); }
-    if (n >= 5) this._unlock('wave5'); if (n >= 10) this._unlock('wave10');
+    if (n >= 5) this._unlock('wave5'); if (n >= 10) this._unlock('wave10'); if (n >= 15) this._unlock('wave15');
   }
   _spawnEnemy(desc) {
     const d = DIFFICULTIES[this.difficulty]; const waveHp = 1 + (this.wave - 1) * 0.07; const pos = this.world.randomSpawn(440);
-    if (desc.type === 'boss') { const hp = Math.round(440 * d.hp * (1 + this.wave * 0.06)); const b = new Boss(this, pos.x, pos.y, hp); b.bulletDamage = 16 * d.dmg; this.boss = b; this.enemies.push(b); this._spawnPoof(pos.x, pos.y, '#c45bd6'); document.getElementById('boss-name').textContent = this.wave >= FINAL_WAVE ? 'FINAL BOSS' : 'BOSS'; return; }
+    if (desc.type === 'boss') {
+      const hp = Math.round(440 * d.hp * (1 + this.wave * 0.06));
+      const variant = ({ 5: 'gunner', 10: 'mortar', 15: 'warlord', 20: 'final' })[this.wave] || Util.choice(['warlord', 'gunner', 'mortar']);
+      const b = new Boss(this, pos.x, pos.y, hp, variant); b.bulletDamage = 16 * d.dmg; this.boss = b; this.enemies.push(b); this._spawnPoof(pos.x, pos.y, '#c45bd6');
+      document.getElementById('boss-name').textContent = BOSS_NAMES[variant] || 'BOSS'; return;
+    }
     if (desc.type === 'turret') { const t = new Turret(this, pos.x, pos.y, { hp: d.hp * waveHp, dmg: d.dmg, fireRate: d.fireRate }); this.enemies.push(t); this._spawnPoof(pos.x, pos.y); return; }
     const scale = { hp: d.hp * waveHp, dmg: d.dmg, fireRate: d.fireRate, speed: d.speed };
     const elite = !desc.noElite && this.wave >= 3 && Util.chance(d.elite);
@@ -197,6 +204,8 @@ class Game {
   addBeam(b) { this.beams.push(b); }
   addLightning(l) { this.lightnings.push(l); }
   addShockwaveFX(s) { this.shockwaves.push(s); }
+  addStrike(s) { this.strikes.push(s); }
+  _skinPalette() { const sk = SKINS.find((s) => s.id === this.skin); return (sk && sk.palette) || PALETTE.player; }
   addFloatingText(x, y, text, opts) { this.floatingTexts.push(new FloatingText(x, y, text, opts)); }
   spawnExplosion(x, y, scale) { this.explosions.push(new Explosion(this, x, y, scale)); if (this.settings.flash && scale >= 1) this.screenFlash('rgba(255,200,120,', 0.25 * scale); }
   allTanks() { return this.player && this.player.alive ? [this.player, ...this.enemies] : this.enemies; }
@@ -272,6 +281,7 @@ class Game {
     ctx.save(); this.camera.apply(ctx);
     this.world.draw(ctx);
     for (const d of this.decals) d.draw(ctx); for (const t of this.treadMarks) t.draw(ctx); for (const cs of this.casings) cs.draw(ctx); for (const d of this.debris) d.draw(ctx);
+    for (const s of this.strikes) s.draw(ctx);
     for (const o of this.obstacles) o.draw(ctx); for (const pu of this.powerups) pu.draw(ctx); for (const c of this.coins) c.draw(ctx); for (const cr of this.crates) cr.draw(ctx);
     for (const ai of this.afterImages) ai.draw(ctx); for (const e of this.enemies) e.draw(ctx); if (this.player && this.player.alive) this.player.draw(ctx);
     for (const b of this.bullets) b.draw(ctx); for (const s of this.shockwaves) s.draw(ctx); for (const pa of this.particles) pa.draw(ctx);
@@ -386,10 +396,20 @@ class Game {
     const tog = (id, key) => document.getElementById(id).addEventListener('change', (e) => { this.settings[key] = e.target.checked; Storage.set(key, this.settings[key]); });
     tog('shake-toggle', 'shake'); tog('weather-toggle', 'weather'); tog('lighting-toggle', 'lighting'); tog('flash-toggle', 'flash'); tog('fps-toggle', 'fps');
     const muteBtns = document.querySelectorAll('.btn-mute'); const sync = () => muteBtns.forEach((b) => b.textContent = this.audio.muted ? '🔇 Muted' : '🔊 Sound'); muteBtns.forEach((b) => b.addEventListener('click', () => { this.audio.toggleMute(); sync(); })); sync();
+    const skinRow = document.getElementById('skin-row'); if (skinRow) skinRow.addEventListener('click', (e) => { const b = e.target.closest('[data-skin]'); if (b) this._selectSkin(b.dataset.skin); });
+  }
+  _selectSkin(id) {
+    const sk = SKINS.find((s) => s.id === id); if (!sk) return;
+    if (this.totalCoins < sk.cost) { this.audio.hit(); return; } // still locked — need more lifetime coins
+    this.skin = id; Storage.set('skin', id); if (id !== 'default') this._unlock('skinned'); this.audio.pickup(); this._renderSkins();
+  }
+  _renderSkins() {
+    const row = document.getElementById('skin-row'); if (!row) return;
+    row.innerHTML = SKINS.map((s) => { const unlocked = this.totalCoins >= s.cost; const sel = s.id === this.skin; return `<button class="skin${sel ? ' active' : ''}${unlocked ? '' : ' locked'}" data-skin="${s.id}"><span class="sw" style="background:${s.palette.hull}"></span><span class="sn">${s.name}</span>${unlocked ? '' : `<span class="sc">🔒 ${s.cost}</span>`}</button>`; }).join('');
   }
   _syncSettings() { document.getElementById('sfx-slider').value = Math.round(this.audio.sfxVolume * 100); document.getElementById('music-slider').value = Math.round(this.audio.musicVolume * 100); document.getElementById('shake-toggle').checked = this.settings.shake; document.getElementById('weather-toggle').checked = this.settings.weather; document.getElementById('lighting-toggle').checked = this.settings.lighting; document.getElementById('flash-toggle').checked = this.settings.flash; document.getElementById('fps-toggle').checked = this.settings.fps; }
   _toMenu() { this.state = STATE.MENU; this._showOverlay('menu'); this._updateMenuUI(); this.audio.startMusic('Sounds/BGM.mp3'); }
-  _updateMenuUI() { document.querySelectorAll('[data-diff]').forEach((b) => b.classList.toggle('active', b.dataset.diff === this.difficulty)); document.querySelectorAll('[data-theme]').forEach((b) => b.classList.toggle('active', b.dataset.theme === this.theme)); document.getElementById('menu-high').textContent = this.highScore.toLocaleString(); document.getElementById('menu-bestwave').textContent = this.bestWave; document.getElementById('menu-ach').textContent = this.achievements.size + '/' + ACHIEVEMENTS.length; }
+  _updateMenuUI() { document.querySelectorAll('[data-diff]').forEach((b) => b.classList.toggle('active', b.dataset.diff === this.difficulty)); document.querySelectorAll('[data-theme]').forEach((b) => b.classList.toggle('active', b.dataset.theme === this.theme)); document.getElementById('menu-high').textContent = this.highScore.toLocaleString(); document.getElementById('menu-bestwave').textContent = this.bestWave; document.getElementById('menu-ach').textContent = this.achievements.size + '/' + ACHIEVEMENTS.length; this._renderSkins(); }
   _showOverlay(name) { this._hideOverlays(); const el = document.getElementById('overlay-' + name); if (el) el.classList.remove('hidden'); this._syncHud(); }
   _hideOverlays() { document.querySelectorAll('.overlay').forEach((o) => o.classList.add('hidden')); this._syncHud(); }
   _syncHud() { const playing = this.state === STATE.PLAYING || this.state === STATE.PAUSED || this.state === STATE.UPGRADE; document.getElementById('hud').classList.toggle('hidden', !playing); if (this.mobile) this.mobile.show(this.state === STATE.PLAYING); }

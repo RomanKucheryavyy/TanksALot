@@ -107,6 +107,15 @@ body.is-touch #game { cursor: default; }
 .perk-rarity { font-size: 11px; font-weight: bold; letter-spacing: 2px; }
 .perk-name { font-size: 20px; font-weight: bold; } .perk-desc { font-size: 13px; color: var(--muted); line-height: 1.4; }
 .reroll-coins { font-size: 13px; color: var(--muted); }
+.hint-sm { font-size: 10px; color: rgba(159,176,194,0.6); letter-spacing: 1px; }
+.skins { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-bottom: 14px; }
+.skin { pointer-events: auto; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 3px; background: rgba(255,255,255,0.05); border: 2px solid transparent; border-radius: 10px; padding: 7px 10px; min-width: 64px; font-family: inherit; color: var(--text); }
+.skin:hover { background: rgba(255,255,255,0.1); }
+.skin.active { border-color: var(--accent); background: rgba(255,211,77,0.1); }
+.skin.locked { opacity: 0.55; }
+.skin .sw { width: 26px; height: 26px; border-radius: 6px; border: 1px solid rgba(0,0,0,0.4); box-shadow: inset 0 -4px 6px rgba(0,0,0,0.3); }
+.skin .sn { font-size: 11px; font-weight: bold; }
+.skin .sc { font-size: 10px; color: #ffcf3a; }
 
 /* -------------------------- Mobile controls ----------------------------- */
 #mobile-controls { position: absolute; inset: 0; z-index: 7; pointer-events: none; }

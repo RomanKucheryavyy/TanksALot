@@ -25,6 +25,16 @@ const PALETTE = {
   boss:    { hull: '#8e44ad', hullDark: '#5e2d73', hi: '#c89bdd', tread: '#2c1738', turret: '#e7d2f1', barrel: '#3d1f4d' },
 };
 
+// Cosmetic player tank skins, unlocked by lifetime coins collected.
+const SKINS = [
+  { id: 'default', name: 'Azure',   cost: 0,    palette: PALETTE.player },
+  { id: 'crimson', name: 'Crimson', cost: 100,  palette: { hull: '#d14b4b', hullDark: '#8e2f2f', hi: '#ee8585', tread: '#3a1f1f', turret: '#f5cccc', barrel: '#4a2222' } },
+  { id: 'toxic',   name: 'Toxic',   cost: 300,  palette: { hull: '#7ac43f', hullDark: '#4e8a23', hi: '#bdf07f', tread: '#243a18', turret: '#dff5c4', barrel: '#2c4a18' } },
+  { id: 'sunset',  name: 'Sunset',  cost: 650,  palette: { hull: '#e08a3b', hullDark: '#a15a1a', hi: '#f4c07f', tread: '#3a2815', turret: '#f7e0c4', barrel: '#5f3a1c' } },
+  { id: 'gold',    name: 'Gold',    cost: 1200, palette: { hull: '#e3c04a', hullDark: '#a3851f', hi: '#f7e08a', tread: '#3a3015', turret: '#fff4c4', barrel: '#5f4e1c' } },
+  { id: 'shadow',  name: 'Shadow',  cost: 2500, palette: { hull: '#3a4150', hullDark: '#21262f', hi: '#5f6b80', tread: '#15181d', turret: '#aab4c4', barrel: '#262b33' } },
+];
+
 const WEAPONS = {
   cannon:      { name: 'Cannon',       fireRate: 0.32,  damage: 30, speed: 640, radius: 6, pellets: 1, spread: 0,    recoil: 6, shake: 4,   sound: 'fireCannon', kind: 'bullet', infinite: true, color: '#ffd34d' },
   machinegun:  { name: 'Machine Gun',  fireRate: 0.085, damage: 9,  speed: 760, radius: 4, pellets: 1, spread: 0.07, recoil: 2, shake: 1.5, sound: 'fireMG',     kind: 'bullet', ammo: 240, color: '#ffe27a' },
@@ -145,6 +155,24 @@ class ShockwaveFX {
   constructor(x, y, maxR, color) { this.x = x; this.y = y; this.maxR = maxR; this.color = color || 'rgba(150,200,255,'; this.life = 0.4; this.maxLife = 0.4; this.dead = false; }
   update(dt) { this.life -= dt; if (this.life <= 0) this.dead = true; }
   draw(ctx) { const t = 1 - this.life / this.maxLife; ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.strokeStyle = this.color + (1 - t) + ')'; ctx.lineWidth = 8 * (1 - t); ctx.beginPath(); ctx.arc(this.x, this.y, this.maxR * Util.easeOutCubic(t), 0, TAU); ctx.stroke(); ctx.restore(); }
+}
+// Telegraphed area strike (boss mortar): a warning ring that detonates after a delay.
+class Strike {
+  constructor(game, x, y, r, delay, dmg, team) { this.game = game; this.x = x; this.y = y; this.r = r; this.delay = delay; this.t = 0; this.dmg = dmg; this.team = team || 'enemy'; this.dead = false; }
+  update(dt) {
+    this.t += dt;
+    if (this.t >= this.delay) {
+      this.dead = true; this.game.spawnExplosion(this.x, this.y, this.r / 60); this.game.addDecal(new Decal(this.x, this.y, this.r * 0.7)); this.game.camera.shake(6, 0.2);
+      const targets = this.team === 'enemy' ? (this.game.player && this.game.player.alive ? [this.game.player] : []) : this.game.enemies;
+      for (const tk of targets) { if (!tk.alive) continue; const d = Util.dist(this.x, this.y, tk.x, tk.y); if (d < this.r) tk.takeDamage(this.dmg * (1 - d / this.r), Util.angleTo(this.x, this.y, tk.x, tk.y), this.team !== 'enemy', {}); }
+    }
+  }
+  draw(ctx) {
+    const p = Math.min(this.t / this.delay, 1); ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = `rgba(255,90,60,${0.35 + 0.45 * p})`; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(this.x, this.y, this.r, 0, TAU); ctx.stroke();
+    ctx.fillStyle = `rgba(255,90,60,${0.14 * p})`; ctx.beginPath(); ctx.arc(this.x, this.y, this.r * p, 0, TAU); ctx.fill();
+    ctx.restore();
+  }
 }
 
 /* ----------------------------- Explosion (overhauled) ------------------- */
@@ -511,10 +539,15 @@ class EnemyTank extends Tank {
 }
 
 /* ------------------------------- Boss ----------------------------------- */
+const BOSS_NAMES = { warlord: 'WARLORD', gunner: 'SENTINEL', mortar: 'FORTRESS', final: 'FINAL BOSS' };
 class Boss extends Tank {
-  constructor(game, x, y, hp) {
+  constructor(game, x, y, hp, variant) {
     super(game, x, y, { radius: 36, team: 'enemy', pal: 'boss', maxHp: hp, speed: 70, turnSpeed: 1.6, turretTurn: 2.0 });
-    this.boss = true; this.scoreValue = 900; this.fireCooldown = 1.2; this.phase = 1; this.detect = 2200; this.preferred = 300; this.bulletSpeed = 380; this.bulletDamage = 16; this._burstTimer = 3; this._summonTimer = 8;
+    this.boss = true; this.variant = variant || 'warlord'; this.scoreValue = 900; this.fireCooldown = 1.2; this.phase = 1;
+    this.detect = 2200; this.preferred = this.variant === 'mortar' ? 460 : 300; this.bulletSpeed = 380; this.bulletDamage = 16;
+    this._burstTimer = 3; this._summonTimer = 8; this._spiral = 0; this.spiralAngle = Util.rand(0, TAU); this._mortar = 2.5;
+    if (this.variant === 'gunner') { this.speed = 95; this.turretTurn = 2.6; }
+    if (this.variant === 'mortar') { this.speed = 48; }
   }
   hasLineOfSight() { return true; }
   update(dt) {
@@ -522,12 +555,32 @@ class Boss extends Tank {
     const player = this.game.player; if (!player || !player.alive) return;
     const ratio = this.hp / this.maxHp; const np = ratio < 0.33 ? 3 : (ratio < 0.66 ? 2 : 1); if (np !== this.phase) { this.phase = np; this.game.onBossPhase(this, this.phase); }
     const d = Util.dist(this.x, this.y, player.x, player.y), toPlayer = Util.angleTo(this.x, this.y, player.x, player.y);
-    let mx = Math.cos(toPlayer + Math.PI / 2) * 0.6, my = Math.sin(toPlayer + Math.PI / 2) * 0.6; if (d > 420) { mx += Math.cos(toPlayer); my += Math.sin(toPlayer); } else if (d < 240) { mx -= Math.cos(toPlayer); my -= Math.sin(toPlayer); }
-    const len = Math.hypot(mx, my) || 1; const spd = this.speed * (this.phase === 3 ? 1.5 : 1) * (this.slow > 0 ? 0.5 : 1); this.bodyAngle = Util.rotateToward(this.bodyAngle, Math.atan2(my, mx), this.turnSpeed * dt); this.moveBy(mx / len * spd * dt, my / len * spd * dt, dt);
+    // movement: orbit + maintain range
+    const strafe = this.variant === 'gunner' ? 0.9 : 0.6;
+    let mx = Math.cos(toPlayer + Math.PI / 2) * strafe, my = Math.sin(toPlayer + Math.PI / 2) * strafe;
+    const far = this.preferred + 120, near = this.preferred - 60;
+    if (d > far) { mx += Math.cos(toPlayer); my += Math.sin(toPlayer); } else if (d < near) { mx -= Math.cos(toPlayer); my -= Math.sin(toPlayer); }
+    const len = Math.hypot(mx, my) || 1; const spd = this.speed * (this.phase === 3 ? 1.5 : 1) * (this.slow > 0 ? 0.5 : 1);
+    this.bodyAngle = Util.rotateToward(this.bodyAngle, Math.atan2(my, mx), this.turnSpeed * dt); this.moveBy(mx / len * spd * dt, my / len * spd * dt, dt);
     this.aimTurret(toPlayer, dt);
-    if (this.fireCooldown <= 0) { this.fireCooldown = this.phase === 3 ? 0.6 : (this.phase === 2 ? 0.9 : 1.2); this.recoil = 6; const tipX = this.x + Math.cos(this.turretAngle) * this.barrelLength, tipY = this.y + Math.sin(this.turretAngle) * this.barrelLength; const spreads = this.phase >= 2 ? [-0.22, -0.07, 0.07, 0.22] : [-0.15, 0, 0.15]; for (const off of spreads) this.game.addBullet(new Bullet(this.game, tipX, tipY, this.turretAngle + off, { speed: this.bulletSpeed, damage: this.bulletDamage, team: 'enemy', radius: 7 })); this.game.audio.enemyShoot(); }
-    if (this.phase >= 2) { this._burstTimer -= dt; if (this._burstTimer <= 0) { this._burstTimer = this.phase === 3 ? 2.2 : 3.2; const n = this.phase === 3 ? 18 : 12; for (let i = 0; i < n; i++) { const a = i / n * TAU; this.game.addBullet(new Bullet(this.game, this.x + Math.cos(a) * this.radius, this.y + Math.sin(a) * this.radius, a, { speed: 300, damage: 12, team: 'enemy', radius: 6 })); } this.game.camera.shake(5, 0.2); } }
-    if (this.phase === 3) { this._summonTimer -= dt; if (this._summonTimer <= 0) { this._summonTimer = 10; this.game.summonAdds(2); this.game.addFloatingText(this.x, this.y - this.radius - 20, 'REINFORCEMENTS!', { color: '#c45bd6', size: 16 }); } }
+    // aimed spread (all variants; mortar fires less)
+    if (this.fireCooldown <= 0) {
+      const base = this.variant === 'mortar' ? 1.6 : 1.2; this.fireCooldown = this.phase === 3 ? base * 0.5 : (this.phase === 2 ? base * 0.75 : base); this.recoil = 6;
+      const tipX = this.x + Math.cos(this.turretAngle) * this.barrelLength, tipY = this.y + Math.sin(this.turretAngle) * this.barrelLength;
+      const spreads = this.phase >= 2 ? [-0.22, -0.07, 0.07, 0.22] : [-0.15, 0, 0.15];
+      for (const off of spreads) this.game.addBullet(new Bullet(this.game, tipX, tipY, this.turretAngle + off, { speed: this.bulletSpeed, damage: this.bulletDamage, team: 'enemy', radius: 7 }));
+      this.game.audio.enemyShoot();
+    }
+    // ---- variant-specific attacks ----
+    if (this.variant === 'gunner') {
+      this.spiralAngle += dt * (this.phase === 3 ? 6 : 3.5); this._spiral -= dt;
+      if (this._spiral <= 0) { this._spiral = 0.09; const arms = this.phase >= 2 ? 3 : 2; for (let a = 0; a < arms; a++) { const ang = this.spiralAngle + a / arms * TAU; this.game.addBullet(new Bullet(this.game, this.x + Math.cos(ang) * this.radius, this.y + Math.sin(ang) * this.radius, ang, { speed: 270, damage: 10, team: 'enemy', radius: 6 })); } }
+    } else if (this.variant === 'mortar') {
+      this._mortar -= dt; if (this._mortar <= 0) { this._mortar = this.phase === 3 ? 1.7 : 2.7; const n = this.phase >= 2 ? 4 : 3; for (let i = 0; i < n; i++) { const px = player.x + Util.rand(-170, 170), py = player.y + Util.rand(-170, 170); this.game.addStrike(new Strike(this.game, px, py, 72, 1.1, 26, 'enemy')); } this.game.addFloatingText(this.x, this.y - this.radius - 18, 'MORTAR!', { color: '#ff8c5a', size: 14 }); }
+    } else { // warlord / final: radial bursts + summons
+      if (this.phase >= 2) { this._burstTimer -= dt; if (this._burstTimer <= 0) { this._burstTimer = this.phase === 3 ? 2.2 : 3.2; const n = this.phase === 3 ? 18 : 12; for (let i = 0; i < n; i++) { const a = i / n * TAU; this.game.addBullet(new Bullet(this.game, this.x + Math.cos(a) * this.radius, this.y + Math.sin(a) * this.radius, a, { speed: 300, damage: 12, team: 'enemy', radius: 6 })); } this.game.camera.shake(5, 0.2); } }
+      if (this.phase === 3) { this._summonTimer -= dt; if (this._summonTimer <= 0) { this._summonTimer = 10; this.game.summonAdds(2); this.game.addFloatingText(this.x, this.y - this.radius - 20, 'REINFORCEMENTS!', { color: '#c45bd6', size: 16 }); } }
+    }
   }
   draw(ctx) { super.draw(ctx); if (!this.game.camera.visible(this.x, this.y, this.radius * 2)) return; ctx.save(); ctx.translate(this.x, this.y); ctx.globalCompositeOperation = 'lighter'; ctx.strokeStyle = `rgba(200,120,230,${0.3 + 0.2 * Math.sin(this.game.time * 4)})`; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(0, 0, this.radius * 1.45, 0, TAU); ctx.stroke(); ctx.restore(); }
 }
