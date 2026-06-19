@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="mobile-web-app-capable" content="yes" />
   <title>TanksALot — Top-Down Tank Survival</title>
-  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/style.css?v=epic2" />
 </head>
 <body>
   <div id="stage">
@@ -45,14 +45,13 @@
 
     <!-- ====================== MOBILE CONTROLS ========================= -->
     <div id="mobile-controls" class="hidden">
-      <div id="move-stick" class="stick"><div id="move-knob" class="knob"></div></div>
-      <div id="aim-stick" class="stick aim"><div id="aim-knob" class="knob"></div></div>
-      <div class="m-right">
+      <div id="move-stick" class="stick"><div class="stick-label">MOVE</div><div id="move-knob" class="knob"></div></div>
+      <div id="aim-stick" class="stick aim"><div class="stick-label">AIM · FIRE</div><div id="aim-knob" class="knob"></div></div>
+      <div class="m-actions">
         <button id="btn-ult" class="m-btn ult">ULT</button>
         <div class="m-row"><button id="btn-shock" class="m-btn">E</button><button id="btn-dash" class="m-btn dash">⤢</button></div>
       </div>
-      <div class="m-left"><button id="btn-weapon-m" class="m-btn small">WPN</button><button id="btn-pause-m" class="m-btn small">❚❚</button></div>
-      <div class="m-hint">Left: move &nbsp;•&nbsp; Right: aim &amp; fire</div>
+      <div class="m-side"><button id="btn-weapon-m" class="m-btn small">WPN</button><button id="btn-pause-m" class="m-btn small">❚❚</button></div>
     </div>
 
     <!-- ============================ LOADING =========================== -->
@@ -142,11 +141,9 @@
     </div>
   </div>
 
-  <div id="rotate-hint"><div class="rot">📱</div><div>Rotate your device to <b>landscape</b> to play TanksALot.</div></div>
-
-  <script src="js/engine.js"></script>
-  <script src="js/entities.js"></script>
-  <script src="js/world.js"></script>
-  <script src="js/game.js"></script>
+  <script src="js/engine.js?v=epic2"></script>
+  <script src="js/entities.js?v=epic2"></script>
+  <script src="js/world.js?v=epic2"></script>
+  <script src="js/game.js?v=epic2"></script>
 </body>
 </html>
