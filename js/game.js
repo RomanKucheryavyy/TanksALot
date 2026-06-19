@@ -39,10 +39,12 @@ class Game {
     this.difficulty = Storage.get('difficulty', 'normal'); this.theme = Storage.get('theme', 'forest');
     this.highScore = Storage.get('highscore', 0); this.bestWave = Storage.get('bestwave', 0); this.totalCoins = Storage.get('totalCoins', 0);
     this.achievements = new Set(Storage.get('achievements', [])); this.skin = Storage.get('skin', 'default');
+    this.mode = Storage.get('mode', 'survival'); this.modeCfg = MODES[this.mode] || MODES.survival; this.profile = this._loadProfile();
     this.settings = { shake: Storage.get('shake', true), weather: Storage.get('weather', true), lighting: Storage.get('lighting', true), flash: Storage.get('flash', true), fps: Storage.get('fps', false) };
 
     this._reset(); this._queueAssets(); this._bindUI();
     this.mobile = new MobileControls(this);
+    this.controller = new LocalController(this);
     this.stage = document.getElementById('stage');
     this._resize();
     window.addEventListener('resize', () => this._resize());
@@ -75,7 +77,7 @@ class Game {
     this.wave = 0; this.score = 0; this.combo = 0; this.comboTimer = 0; this.maxCombo = 0;
     this.lives = 3; this.coinCount = 0; this.intermission = 0; this.respawnTimer = 0; this.powerupTimer = Util.rand(8, 14);
     this.bossWave = false; this.boss = null; this.killfeed = []; this.damageFlash = 0; this._lastPlayerHp = 0; this.waveDamageTaken = 0;
-    this._lowBeep = 0; this.runKills = 0; this.runTime = 0; this.flash = { a: 0, color: 'rgba(255,255,255,' };
+    this._lowBeep = 0; this.runKills = 0; this.runTime = 0; this.blitzTime = 0; this._lastReward = null; this._leveledUp = false; this.flash = { a: 0, color: 'rgba(255,255,255,' };
   }
   _queueAssets() { this.assets.queueImage('img/forest/grass03.png'); this.assets.queueImage('img/background/desertTile.png'); this.assets.queueImage('img/Explosion_C.png'); this.assets.queueImage('img/Explosion_A.png'); }
 
@@ -108,8 +110,9 @@ class Game {
 
   _updatePlaying(dt) {
     this.runTime += dt;
+    if (this.modeCfg.timeLimit) { this.blitzTime -= dt; if (this.blitzTime <= 0) { this.blitzTime = 0; this._gameOver('TIME UP!'); return; } }
     const p = this.player;
-    if (p && p.alive) { p.update(dt); this.world.affect(p, dt); }
+    if (p && p.alive) { this.controller.fill(p); p.update(dt); this.world.affect(p, dt); }
     for (const e of this.enemies) { e.update(dt); this.world.affect(e, dt); }
     for (const o of this.obstacles) o.update(dt);
     for (const arr of [this.bullets, this.particles, this.treadMarks, this.explosions, this.powerups, this.coins, this.crates, this.floatingTexts, this.decals, this.casings, this.afterImages, this.debris, this.beams, this.lightnings, this.shockwaves, this.strikes]) for (const o of arr) o.update(dt);
@@ -148,25 +151,39 @@ class Game {
 
   /* --------------------------- world / waves --------------------------- */
   newGame() {
-    this._reset(); Storage.set('difficulty', this.difficulty); Storage.set('theme', this.theme);
-    const d = DIFFICULTIES[this.difficulty]; this.lives = d.lives;
+    this._reset(); this.modeCfg = MODES[this.mode] || MODES.survival;
+    Storage.set('difficulty', this.difficulty); Storage.set('theme', this.theme); Storage.set('mode', this.mode);
+    const d = DIFFICULTIES[this.difficulty]; this.lives = this.modeCfg.sandbox ? 99 : d.lives;
     const size = 2600; this.world = new World(this, size, size, this.theme);
     this.camera.setWorld(size, size); this.camera.x = size / 2 - this.camera.vw / 2; this.camera.y = size / 2 - this.camera.vh / 2;
-    this.player = new PlayerTank(this, size / 2, size / 2); this.player.palette = this._skinPalette(); this._lastPlayerHp = this.player.hp;
+    this.player = new PlayerTank(this, size / 2, size / 2); this.player.palette = this._skinPalette();
+    this._applyMeta(this.player);
+    if (this.modeCfg.sandbox) { this.player.invuln = 1e9; for (const k of WEAPON_KEYS) this.player.giveWeapon(k); this.player.weapon = 'cannon'; }
+    this._lastPlayerHp = this.player.hp; this.blitzTime = this.modeCfg.timeLimit || 0;
     this.obstacles = this.world.generateObstacles(38, this.player.x, this.player.y);
     this.world.generateHazards(this.theme === 'arctic' ? 3 : 4, this.player.x, this.player.y); this.world.generateDecor(120);
     this.state = STATE.PLAYING; this._hideOverlays(); this.audio.startMusic('Sounds/BGM.mp3'); this._spawnWave(1);
   }
+  _applyMeta(player) { for (const u of META_UPGRADES) { const lvl = this.profile.upgrades[u.id] || 0; if (lvl > 0) u.apply(player, lvl, this); } }
   _spawnWave(n) {
-    this.wave = n; this.intermission = 0; this.bossWave = (n % 5 === 0); this.waveDamageTaken = 0; const d = DIFFICULTIES[this.difficulty]; const queue = [];
-    if (this.bossWave) { queue.push({ type: 'boss' }); const adds = Math.min(2 + Math.floor(n / 5), 6); const pool = enemyPoolForWave(n); for (let i = 0; i < adds; i++) queue.push({ type: Util.choice(pool) }); this._showBanner(n >= FINAL_WAVE ? 'FINAL BOSS' : 'BOSS WAVE', '#c45bd6'); this.audio.bossRoar(); }
-    else { let count = Math.round((3 + n * 1.25) * d.count); count = Math.min(count, 16); const pool = enemyPoolForWave(n); for (let i = 0; i < count; i++) queue.push({ type: Util.choice(pool) }); this._showBanner('WAVE ' + n, '#ffd34d'); }
+    this.wave = n; this.intermission = 0; this.waveDamageTaken = 0; const d = DIFFICULTIES[this.difficulty]; const queue = [];
+    this.bossWave = this.modeCfg.bossrush ? true : (n % 5 === 0);
+    if (this.bossWave) {
+      queue.push({ type: 'boss' });
+      const adds = this.modeCfg.bossrush ? Math.min(n, 5) : Math.min(2 + Math.floor(n / 5), 6);
+      const pool = enemyPoolForWave(Math.max(n, 3)); for (let i = 0; i < adds; i++) queue.push({ type: Util.choice(pool) });
+      this._showBanner(this._isFinalBoss(n) ? 'FINAL BOSS' : (this.modeCfg.bossrush ? 'BOSS ' + n : 'BOSS WAVE'), '#c45bd6'); this.audio.bossRoar();
+    } else {
+      let count = Math.round((3 + n * 1.25) * d.count); count = Math.min(count, this.modeCfg.endless ? 22 : 16);
+      const pool = enemyPoolForWave(n); for (let i = 0; i < count; i++) queue.push({ type: Util.choice(pool) }); this._showBanner('WAVE ' + n, '#ffd34d');
+    }
     const wbw = { 2: 'machinegun', 3: 'shotgun', 4: 'rockets', 5: 'laser', 6: 'flamethrower', 7: 'railgun', 8: 'tesla' };
-    if (wbw[n] && this.player) { const s = this.world.randomSpawn(120); this.crates.push(new WeaponCrate(this, s.x, s.y, wbw[n])); }
+    if (wbw[n] && this.player && !this.modeCfg.sandbox) { const s = this.world.randomSpawn(120); this.crates.push(new WeaponCrate(this, s.x, s.y, wbw[n])); }
     this.spawnQueue = queue; this.spawnTimer = 0.2; this.audio.wave(); this.audio.setMusicIntensity(this.bossWave);
     if (n > this.bestWave) { this.bestWave = n; Storage.set('bestwave', n); }
     if (n >= 5) this._unlock('wave5'); if (n >= 10) this._unlock('wave10'); if (n >= 15) this._unlock('wave15');
   }
+  _isFinalBoss(n) { return !!(this.modeCfg.finalWave && n >= this.modeCfg.finalWave); }
   _spawnEnemy(desc) {
     const d = DIFFICULTIES[this.difficulty]; const waveHp = 1 + (this.wave - 1) * 0.07; const pos = this.world.randomSpawn(440);
     if (desc.type === 'boss') {
@@ -242,7 +259,7 @@ class Game {
     if (Util.chance((tank.boss ? 1 : (tank.elite ? 0.5 : 0.16)) + bonus)) this._dropPowerUp({ x: tank.x, y: tank.y });
     if (this.runKills % 18 === 0 && this.player) { const owned = this.player.weaponOrder; const all = WEAPON_KEYS.filter((k) => k !== 'cannon'); const k = Util.choice(all); this.crates.push(new WeaponCrate(this, tank.x, tank.y, k)); this._showBanner('KILLSTREAK!', '#ffcf3a'); }
     if (this.player && this.player.weaponOrder.length >= WEAPON_KEYS.length) this._unlock('arsenal');
-    if (tank.boss) { this.setSlowmo(0.8); this._unlock('boss'); if (this.settings.flash) this.screenFlash('rgba(255,220,150,', 0.6); if (this.wave >= FINAL_WAVE) { this._victory(); return; } }
+    if (tank.boss) { this.setSlowmo(0.8); this._unlock('boss'); if (this.settings.flash) this.screenFlash('rgba(255,220,150,', 0.6); if (this._isFinalBoss(this.wave)) { this._victory(); return; } }
   }
   _addKill(tank) { const names = { grunt: 'Grunt', scout: 'Scout', heavy: 'Heavy', artillery: 'Artillery', bomber: 'Bomber', shielded: 'Shielded', sniper: 'Sniper', splitter: 'Splitter', splitling: 'Splitling', drone: 'Drone' }; const name = (tank.elite ? 'Elite ' : '') + (tank.boss ? 'BOSS' : (tank instanceof Turret ? 'Turret' : (names[tank.type] || 'Tank'))); const col = tank.boss ? '#c45bd6' : (tank.elite ? '#ffd34d' : (tank.palette ? tank.palette.hull : '#fff')); this.killfeed.unshift({ text: name, color: col, life: 4 }); if (this.killfeed.length > 5) this.killfeed.pop(); }
   _dropPowerUp(pos) { const types = Object.keys(POWERUP_TYPES); let type; if (this.player && this.player.hp < this.player.maxHp * 0.4 && Util.chance(0.5)) type = 'heal'; else if (Util.chance(0.06)) type = 'nuke'; else if (Util.chance(0.08)) type = 'magnet'; else type = Util.choice(['heal', 'shield', 'rapid', 'spread', 'speed', 'damage']); this.powerups.push(new PowerUp(this, pos.x, pos.y, type)); }
@@ -258,18 +275,32 @@ class Game {
   /* ------------------------------ states ------------------------------- */
   pause() { if (this.state !== STATE.PLAYING) return; this.state = STATE.PAUSED; this._showOverlay('pause'); }
   resume() { if (this.state !== STATE.PAUSED) return; this.state = STATE.PLAYING; this._hideOverlays(); this._lastTime = performance.now(); }
-  _gameOver() {
-    this.state = STATE.GAMEOVER; this.audio.gameover(); this._checkHighScore();
+  _gameOver(title) {
+    this.state = STATE.GAMEOVER; this.audio.gameover(); this._checkHighScore(); this._finishRun();
+    document.getElementById('go-title').textContent = title || 'GAME OVER';
     document.getElementById('go-score').textContent = this.score.toLocaleString(); document.getElementById('go-wave').textContent = this.wave;
     document.getElementById('go-kills').textContent = this.runKills; document.getElementById('go-combo').textContent = 'x' + this.maxCombo;
     document.getElementById('go-time').textContent = this._fmtTime(this.runTime); document.getElementById('go-high').textContent = this.highScore.toLocaleString();
+    document.getElementById('go-credits').textContent = '+' + this._lastReward.credits; document.getElementById('go-xp').textContent = '+' + this._lastReward.xp;
     this._showOverlay('gameover');
   }
   _victory() {
-    this.state = STATE.VICTORY; this.audio.victory(); this._checkHighScore(); this._unlock('victory'); this.screenFlash('rgba(120,255,160,', 0.7);
+    this.state = STATE.VICTORY; this.audio.victory(); this._checkHighScore(); this._unlock('victory'); this.screenFlash('rgba(120,255,160,', 0.7); this._finishRun();
     document.getElementById('vic-score').textContent = this.score.toLocaleString(); document.getElementById('vic-high').textContent = this.highScore.toLocaleString();
+    document.getElementById('vic-credits').textContent = '+' + this._lastReward.credits; document.getElementById('vic-xp').textContent = '+' + this._lastReward.xp;
     this._showOverlay('victory');
   }
+  // Tally lifetime stats, per-mode bests, and award credits + XP for the run.
+  _finishRun() {
+    const st = this.profile.stats; st.runs++; st.kills += this.runKills; st.playtime += this.runTime;
+    st.bestWave[this.mode] = Math.max(st.bestWave[this.mode] || 0, this.wave); st.bestScore[this.mode] = Math.max(st.bestScore[this.mode] || 0, this.score);
+    let credits = 0, xp = 0; this._leveledUp = false;
+    if (!this.modeCfg.sandbox) { credits = Math.round(this.score / 40 + this.wave * 8 + this.runKills); xp = Math.round(this.score / 10 + this.wave * 20 + this.runKills * 2); this.profile.credits += credits; this._addXp(xp); }
+    this._lastReward = { credits, xp }; this._saveProfile();
+  }
+  _addXp(xp) { this.profile.xp += xp; while (this.profile.xp >= xpForLevel(this.profile.level)) { this.profile.xp -= xpForLevel(this.profile.level); this.profile.level++; this.profile.credits += 50; this._leveledUp = true; } }
+  _loadProfile() { const def = { level: 1, xp: 0, credits: 0, upgrades: {}, stats: { runs: 0, kills: 0, playtime: 0, bestWave: {}, bestScore: {} } }; const s = Storage.get('profile', null); if (!s) return def; s.upgrades = s.upgrades || {}; s.stats = s.stats || def.stats; s.stats.bestWave = s.stats.bestWave || {}; s.stats.bestScore = s.stats.bestScore || {}; return Object.assign(def, s); }
+  _saveProfile() { Storage.set('profile', this.profile); }
   _fmtTime(s) { const m = Math.floor(s / 60), ss = Math.floor(s % 60); return m + ':' + (ss < 10 ? '0' : '') + ss; }
   _checkHighScore() { if (this.score > this.highScore) { this.highScore = this.score; Storage.set('highscore', this.score); } }
   _unlock(id) { if (this.achievements.has(id)) return; this.achievements.add(id); Storage.set('achievements', [...this.achievements]); const a = ACHIEVEMENTS.find((x) => x.id === id); if (a) { this.toasts.push({ name: a.name, desc: a.desc, life: 4 }); this.audio.levelUp(); this._renderToasts(); } }
@@ -351,6 +382,7 @@ class Game {
     const comboEl = document.getElementById('combo'); if (this.combo >= 2) { comboEl.style.opacity = '1'; comboEl.textContent = 'COMBO x' + this.combo; comboEl.style.color = this.combo >= 10 ? '#ff4d4d' : (this.combo >= 5 ? '#ff8c2b' : '#ffd34d'); } else comboEl.style.opacity = '0';
     const bb = document.getElementById('boss-bar'); if (this.boss && this.boss.alive) { bb.classList.remove('hidden'); document.getElementById('boss-fill').style.width = Util.clamp(this.boss.hp / this.boss.maxHp, 0, 1) * 100 + '%'; } else bb.classList.add('hidden');
     const fpsEl = document.getElementById('fps'); fpsEl.style.display = this.settings.fps ? 'block' : 'none'; if (this.settings.fps) fpsEl.textContent = Math.round(this.fps) + ' FPS';
+    const bt = document.getElementById('blitz-timer'); if (this.modeCfg.timeLimit) { bt.style.display = 'block'; bt.textContent = '⏱ ' + this._fmtTime(Math.max(0, this.blitzTime)); bt.classList.toggle('low', this.blitzTime < 20); } else bt.style.display = 'none';
     this._updateBuffs(); this._renderKillFeed(); this._drawMinimap();
   }
   _updateBuffs() {
@@ -397,6 +429,43 @@ class Game {
     tog('shake-toggle', 'shake'); tog('weather-toggle', 'weather'); tog('lighting-toggle', 'lighting'); tog('flash-toggle', 'flash'); tog('fps-toggle', 'fps');
     const muteBtns = document.querySelectorAll('.btn-mute'); const sync = () => muteBtns.forEach((b) => b.textContent = this.audio.muted ? '🔇 Muted' : '🔊 Sound'); muteBtns.forEach((b) => b.addEventListener('click', () => { this.audio.toggleMute(); sync(); })); sync();
     const skinRow = document.getElementById('skin-row'); if (skinRow) skinRow.addEventListener('click', (e) => { const b = e.target.closest('[data-skin]'); if (b) this._selectSkin(b.dataset.skin); });
+    const modeRow = document.getElementById('mode-row'); if (modeRow) modeRow.addEventListener('click', (e) => { const b = e.target.closest('[data-mode]'); if (b) this._selectMode(b.dataset.mode); });
+    document.getElementById('btn-upgrades').addEventListener('click', () => { this._renderShop(); this._showOverlay('upgrades'); });
+    document.getElementById('btn-profile').addEventListener('click', () => { this._renderProfile(); this._showOverlay('profile'); });
+    document.getElementById('btn-shop-back').addEventListener('click', () => { this._showOverlay('menu'); this._updateMenuUI(); });
+    document.getElementById('btn-profile-back').addEventListener('click', () => { this._showOverlay('menu'); this._updateMenuUI(); });
+    const shopGrid = document.getElementById('shop-grid'); if (shopGrid) shopGrid.addEventListener('click', (e) => { const b = e.target.closest('[data-buy]'); if (b) this._buyUpgrade(b.dataset.buy); });
+  }
+  _selectMode(id) { if (!MODES[id]) return; this.mode = id; this.modeCfg = MODES[id]; Storage.set('mode', id); this.audio.pickup(); this._renderModes(); }
+  _renderModes() {
+    const row = document.getElementById('mode-row'); if (!row) return;
+    row.innerHTML = Object.keys(MODES).map((id) => { const m = MODES[id]; const sel = id === this.mode; return `<button class="modebtn${sel ? ' active' : ''}" data-mode="${id}"><span class="mi">${m.icon}</span><span class="mn">${m.name}</span></button>`; }).join('');
+    const desc = document.getElementById('mode-desc'); if (desc) desc.textContent = (MODES[this.mode] || MODES.survival).desc;
+  }
+  _buyUpgrade(id) {
+    const u = META_UPGRADES.find((x) => x.id === id); if (!u) return; const lvl = this.profile.upgrades[id] || 0; if (lvl >= u.max) return;
+    const cost = u.cost(lvl); if (this.profile.credits < cost) { this.audio.hit(); return; }
+    this.profile.credits -= cost; this.profile.upgrades[id] = lvl + 1; this._saveProfile(); this.audio.upgrade(); this._renderShop();
+  }
+  _renderShop() {
+    document.getElementById('shop-credits').textContent = this.profile.credits.toLocaleString();
+    document.getElementById('shop-grid').innerHTML = META_UPGRADES.map((u) => {
+      const lvl = this.profile.upgrades[u.id] || 0, maxed = lvl >= u.max, cost = u.cost(lvl), afford = this.profile.credits >= cost;
+      const pips = Array.from({ length: u.max }, (_, i) => `<span class="pip${i < lvl ? ' on' : ''}"></span>`).join('');
+      return `<div class="shop-card"><div class="su-name">${u.name}</div><div class="su-desc">${u.desc}</div><div class="su-pips">${pips}</div>` +
+        (maxed ? `<button class="su-buy maxed" disabled>MAX</button>` : `<button class="su-buy${afford ? '' : ' poor'}" data-buy="${u.id}">🪙 ${cost}</button>`) + `</div>`;
+    }).join('');
+  }
+  _renderProfile() {
+    const st = this.profile.stats, need = xpForLevel(this.profile.level), pct = Math.round(this.profile.xp / need * 100);
+    const bw = st.bestWave || {}, bs = st.bestScore || {};
+    const modeRows = Object.keys(MODES).map((id) => `<tr><td>${MODES[id].icon} ${MODES[id].name}</td><td>${bw[id] || 0}</td><td>${(bs[id] || 0).toLocaleString()}</td></tr>`).join('');
+    const ach = ACHIEVEMENTS.map((a) => `<span class="ach-chip${this.achievements.has(a.id) ? ' got' : ''}" title="${a.desc}">${this.achievements.has(a.id) ? '🏆' : '🔒'} ${a.name}</span>`).join('');
+    document.getElementById('profile-body').innerHTML =
+      `<div class="lvl-row"><span class="lvl">LVL ${this.profile.level}</span><div class="xp-bar"><div class="xp-fill" style="width:${pct}%"></div></div><span class="cr">🪙 ${this.profile.credits.toLocaleString()}</span></div>` +
+      `<div class="prof-stats"><div><b>${st.runs || 0}</b><span>Runs</span></div><div><b>${(st.kills || 0).toLocaleString()}</b><span>Kills</span></div><div><b>${this._fmtTime(st.playtime || 0)}</b><span>Playtime</span></div><div><b>${this.achievements.size}/${ACHIEVEMENTS.length}</b><span>Achievements</span></div></div>` +
+      `<table class="best-table"><tr><th>Mode</th><th>Best Wave</th><th>Best Score</th></tr>${modeRows}</table>` +
+      `<div class="ach-list">${ach}</div>`;
   }
   _selectSkin(id) {
     const sk = SKINS.find((s) => s.id === id); if (!sk) return;
@@ -409,10 +478,34 @@ class Game {
   }
   _syncSettings() { document.getElementById('sfx-slider').value = Math.round(this.audio.sfxVolume * 100); document.getElementById('music-slider').value = Math.round(this.audio.musicVolume * 100); document.getElementById('shake-toggle').checked = this.settings.shake; document.getElementById('weather-toggle').checked = this.settings.weather; document.getElementById('lighting-toggle').checked = this.settings.lighting; document.getElementById('flash-toggle').checked = this.settings.flash; document.getElementById('fps-toggle').checked = this.settings.fps; }
   _toMenu() { this.state = STATE.MENU; this._showOverlay('menu'); this._updateMenuUI(); this.audio.startMusic('Sounds/BGM.mp3'); }
-  _updateMenuUI() { document.querySelectorAll('[data-diff]').forEach((b) => b.classList.toggle('active', b.dataset.diff === this.difficulty)); document.querySelectorAll('[data-theme]').forEach((b) => b.classList.toggle('active', b.dataset.theme === this.theme)); document.getElementById('menu-high').textContent = this.highScore.toLocaleString(); document.getElementById('menu-bestwave').textContent = this.bestWave; document.getElementById('menu-ach').textContent = this.achievements.size + '/' + ACHIEVEMENTS.length; this._renderSkins(); }
+  _updateMenuUI() { document.querySelectorAll('[data-diff]').forEach((b) => b.classList.toggle('active', b.dataset.diff === this.difficulty)); document.querySelectorAll('[data-theme]').forEach((b) => b.classList.toggle('active', b.dataset.theme === this.theme)); document.getElementById('menu-high').textContent = this.highScore.toLocaleString(); document.getElementById('menu-bestwave').textContent = this.bestWave; document.getElementById('menu-ach').textContent = this.achievements.size + '/' + ACHIEVEMENTS.length; document.getElementById('menu-level').textContent = this.profile.level; document.getElementById('menu-credits').textContent = this.profile.credits.toLocaleString(); this._renderSkins(); this._renderModes(); }
   _showOverlay(name) { this._hideOverlays(); const el = document.getElementById('overlay-' + name); if (el) el.classList.remove('hidden'); this._syncHud(); }
   _hideOverlays() { document.querySelectorAll('.overlay').forEach((o) => o.classList.add('hidden')); this._syncHud(); }
   _syncHud() { const playing = this.state === STATE.PLAYING || this.state === STATE.PAUSED || this.state === STATE.UPGRADE; document.getElementById('hud').classList.toggle('hidden', !playing); if (this.mobile) this.mobile.show(this.state === STATE.PLAYING); }
+}
+
+/* ------------------ Local input -> player command ----------------------- */
+// Translates local keyboard/mouse/touch into the player's command object.
+// The simulation only ever reads commands, so swapping this for a
+// NetworkController (remote players) or AIController is the seam for online.
+class LocalController {
+  constructor(game) { this.game = game; }
+  fill(p) {
+    const input = this.game.input, c = p.command;
+    let dx = 0, dy = 0;
+    if (input.down('KeyW') || input.down('ArrowUp')) dy -= 1; if (input.down('KeyS') || input.down('ArrowDown')) dy += 1;
+    if (input.down('KeyA') || input.down('ArrowLeft')) dx -= 1; if (input.down('KeyD') || input.down('ArrowRight')) dx += 1;
+    if (dx === 0 && dy === 0 && (input.move.x || input.move.y)) { dx = input.move.x; dy = input.move.y; }
+    c.mx = dx; c.my = dy;
+    if (input.aimActive && (input.aimVec.x || input.aimVec.y)) c.aimAngle = Math.atan2(input.aimVec.y, input.aimVec.x);
+    else { const m = this.game.camera.screenToWorld(input.mouse.x, input.mouse.y); c.aimAngle = Util.angleTo(p.x, p.y, m.x, m.y); }
+    c.fire = !!(input.mouseDown || input.down('Space') || input.firing);
+    c.dash = input.justPressed('ShiftLeft') || input.justPressed('ShiftRight');
+    c.shock = input.justPressed('KeyE');
+    c.ult = input.justPressed('KeyF') || input.justPressed('KeyR');
+    c.cycle = input.takeWheel(); if (input.justPressed('KeyQ')) c.cycle = -1;
+    c.select = -1; for (let n = 1; n <= 8; n++) if (input.justPressed('Digit' + n)) c.select = n - 1;
+  }
 }
 
 /* ------------------------- Mobile touch controls ------------------------ */

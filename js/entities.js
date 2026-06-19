@@ -403,6 +403,10 @@ class PlayerTank extends Tank {
     this.damageMult = 1; this.fireRateMult = 1; this.speedMult = 1; this.bulletSpeedMult = 1; this.extraProjectiles = 0; this.ricochet = 0; this.pierceBonus = 0; this.incendiary = 0;
     this.lifestealPct = 0; this.critChance = 0.06; this.critMult = 2; this.thorns = 0; this.pickupRange = 120; this.dropBonus = 0; this.adrenaline = false; this.dashCdMult = 1;
     this.explosiveRounds = 0; this.freezeRounds = 0; this.knockbackBonus = 0; this.dodgeChance = 0; this.regen = 0; this.drones = 0; this.ultGainMult = 1; this.reviveCharges = 0; this.droneAngle = 0; this.droneCd = 0;
+    // Input is consumed only through this command object — filled by a
+    // controller (local input now; could be network/AI later). The sim never
+    // reads the keyboard/mouse directly, which is the groundwork for online.
+    this.command = { mx: 0, my: 0, aimAngle: this.bodyAngle, fire: false, dash: false, shock: false, ult: false, cycle: 0, select: -1 };
   }
   giveWeapon(key) { const w = WEAPONS[key]; if (this.weapons[key] === undefined) { this.weapons[key] = w.ammo || 0; this.weaponOrder.push(key); } else this.weapons[key] += w.ammo || 0; this.weapon = key; }
   cycleWeapon(d) { const i = this.weaponOrder.indexOf(this.weapon); this.weapon = this.weaponOrder[(i + d + this.weaponOrder.length) % this.weaponOrder.length]; }
@@ -417,11 +421,10 @@ class PlayerTank extends Tank {
     return killed;
   }
   dash() {
-    if (this.dashCd > 0) return; this.dashCd = 1.5 * this.dashCdMult; this.dashTime = 0.18; const input = this.game.input; let dx = 0, dy = 0;
-    if (input.down('KeyW') || input.down('ArrowUp')) dy -= 1; if (input.down('KeyS') || input.down('ArrowDown')) dy += 1; if (input.down('KeyA') || input.down('ArrowLeft')) dx -= 1; if (input.down('KeyD') || input.down('ArrowRight')) dx += 1;
-    if (dx === 0 && dy === 0 && (input.move.x || input.move.y)) { dx = input.move.x; dy = input.move.y; }
+    if (this.dashCd > 0) return; this.dashCd = 1.5 * this.dashCdMult; this.dashTime = 0.18;
+    let dx = this.command.mx, dy = this.command.my;
     if (dx === 0 && dy === 0) { dx = Math.cos(this.bodyAngle); dy = Math.sin(this.bodyAngle); }
-    const len = Math.hypot(dx, dy); this.dashDir = { x: dx / len, y: dy / len }; this.bodyAngle = Math.atan2(dy, dx); this.game.audio.dash(); this.game.camera.shake(4, 0.12);
+    const len = Math.hypot(dx, dy) || 1; this.dashDir = { x: dx / len, y: dy / len }; this.bodyAngle = Math.atan2(dy, dx); this.game.audio.dash(); this.game.camera.shake(4, 0.12);
   }
   shockwave() {
     if (this.shockCd > 0) return; this.shockCd = 6; this.game.audio.shockwave(); this.game.addShockwaveFX(new ShockwaveFX(this.x, this.y, 220, 'rgba(120,200,255,')); this.game.camera.shake(8, 0.3); this.game.hitStop(0.05);
@@ -472,28 +475,22 @@ class PlayerTank extends Tank {
     if (!this.alive) return; this.updateTimers(dt);
     if (this.invuln > 0) this.invuln -= dt; if (this.dashCd > 0) this.dashCd -= dt; if (this.shockCd > 0) this.shockCd -= dt; if (this.fireCooldown > 0) this.fireCooldown -= dt;
     if (this.regen > 0 && this.hp < this.maxHp) this.hp = Math.min(this.maxHp, this.hp + this.regen * dt);
-    const input = this.game.input;
-    const wheel = input.takeWheel(); if (wheel) this.cycleWeapon(wheel > 0 ? 1 : -1);
-    for (let n = 1; n <= 8; n++) if (input.justPressed('Digit' + n)) this.selectWeaponIndex(n - 1);
-    if (input.justPressed('KeyQ')) this.cycleWeapon(-1);
-    if (input.justPressed('ShiftLeft') || input.justPressed('ShiftRight')) this.dash();
-    if (input.justPressed('KeyE')) this.shockwave();
-    if (input.justPressed('KeyF') || input.justPressed('KeyR')) this.useUltimate();
+    const c = this.command;
+    if (c.cycle) this.cycleWeapon(c.cycle > 0 ? 1 : -1);
+    if (c.select >= 0) this.selectWeaponIndex(c.select);
+    if (c.dash) this.dash();
+    if (c.shock) this.shockwave();
+    if (c.ult) this.useUltimate();
     if (this.dashTime > 0) {
       this.dashTime -= dt; const ds = this.speed * 2.7; this.moveBy(this.dashDir.x * ds * dt, this.dashDir.y * ds * dt, dt);
-      if (Math.random() < 0.7) this.game.addAfterImage(new AfterImage((c) => { c.translate(this.x, this.y); c.rotate(this.bodyAngle); c.fillStyle = '#7fb4ee'; roundRectPath(c, -this.radius, -this.radius * 0.8, this.radius * 2, this.radius * 1.6, 6); c.fill(); }));
+      if (Math.random() < 0.7) this.game.addAfterImage(new AfterImage((cx) => { cx.translate(this.x, this.y); cx.rotate(this.bodyAngle); cx.fillStyle = '#7fb4ee'; roundRectPath(cx, -this.radius, -this.radius * 0.8, this.radius * 2, this.radius * 1.6, 6); cx.fill(); }));
     } else {
-      let dx = 0, dy = 0;
-      if (input.down('KeyW') || input.down('ArrowUp')) dy -= 1; if (input.down('KeyS') || input.down('ArrowDown')) dy += 1; if (input.down('KeyA') || input.down('ArrowLeft')) dx -= 1; if (input.down('KeyD') || input.down('ArrowRight')) dx += 1;
-      if (dx === 0 && dy === 0 && (input.move.x || input.move.y)) { dx = input.move.x; dy = input.move.y; }
+      let dx = c.mx, dy = c.my;
       const spd = this.speed * this.speedMult * (this.speedTime > 0 ? 1.4 : 1) * (this.slow > 0 ? 0.5 : 1);
       if (dx !== 0 || dy !== 0) { const len = Math.hypot(dx, dy); dx /= len; dy /= len; this.bodyAngle = Util.rotateToward(this.bodyAngle, Math.atan2(dy, dx), this.turnSpeed * dt); this.moveBy(dx * spd * dt, dy * spd * dt, dt); } else this.moving = false;
     }
-    let aimAngle;
-    if (input.aimActive && (input.aimVec.x || input.aimVec.y)) aimAngle = Math.atan2(input.aimVec.y, input.aimVec.x);
-    else { const m = this.game.camera.screenToWorld(input.mouse.x, input.mouse.y); aimAngle = Util.angleTo(this.x, this.y, m.x, m.y); }
-    this.aimTurret(aimAngle, dt);
-    if (input.mouseDown || input.down('Space') || input.firing) this.fire();
+    this.aimTurret(c.aimAngle, dt);
+    if (c.fire) this.fire();
     if (this.drones > 0) { this.droneAngle += dt * 2; this.droneCd -= dt; if (this.droneCd <= 0) { this.droneCd = 0.5; let best = null, bd = 520; for (const e of this.game.enemies) { if (!e.alive) continue; const d = Util.dist(this.x, this.y, e.x, e.y); if (d < bd) { bd = d; best = e; } } if (best) for (let i = 0; i < this.drones; i++) { const a = this.droneAngle + i / this.drones * TAU, dxp = this.x + Math.cos(a) * 46, dyp = this.y + Math.sin(a) * 46, ang = Util.angleTo(dxp, dyp, best.x, best.y); this.game.addBullet(new Bullet(this.game, dxp, dyp, ang, { speed: 560, damage: 8 * this.damageMult, team: 'player', radius: 4, color: '#9fe6ff' })); } } }
   }
   draw(ctx) { super.draw(ctx); if (this.drones > 0 && this.game.camera.visible(this.x, this.y, 60)) for (let i = 0; i < this.drones; i++) { const a = this.droneAngle + i / this.drones * TAU, x = this.x + Math.cos(a) * 46, y = this.y + Math.sin(a) * 46; ctx.save(); ctx.translate(x, y); ctx.fillStyle = '#9fe6ff'; ctx.shadowColor = '#9fe6ff'; ctx.shadowBlur = 8; ctx.beginPath(); ctx.arc(0, 0, 5, 0, TAU); ctx.fill(); ctx.restore(); } }

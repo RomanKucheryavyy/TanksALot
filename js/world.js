@@ -64,6 +64,33 @@ function rollPerk(exclude) {
   return pool[pool.length - 1];
 }
 
+/* ------------------------------- Game modes ----------------------------- */
+const MODES = {
+  survival: { name: 'Survival', icon: '🎯', desc: 'Clear 20 escalating waves and topple the final boss.', finalWave: 20 },
+  endless:  { name: 'Endless',  icon: '♾️', desc: 'Never-ending waves that scale forever. Chase the high score.', endless: true },
+  bossrush: { name: 'Boss Rush', icon: '👹', desc: 'Back-to-back bosses with no breaks. How many can you fell?', bossrush: true },
+  blitz:    { name: 'Blitz',    icon: '⏱️', desc: 'Three minutes of nonstop carnage — rack up maximum score.', timeLimit: 180 },
+  sandbox:  { name: 'Sandbox',  icon: '🛠️', desc: 'Full arsenal, no death. Practice builds, weapons and combos.', sandbox: true },
+};
+
+/* ---------------------- Persistent meta-upgrades ------------------------ */
+// Bought with credits between runs; applied to the player at run start.
+const META_UPGRADES = [
+  { id: 'hp',        name: 'Hull Plating',  desc: '+15 starting Max HP', max: 8, cost: (l) => 40 + l * 30, apply: (p, l) => { p.maxHp += 15 * l; p.hp = p.maxHp; } },
+  { id: 'damage',    name: 'Munitions',     desc: '+8% damage',          max: 8, cost: (l) => 50 + l * 35, apply: (p, l) => { p.damageMult *= (1 + 0.08 * l); } },
+  { id: 'firerate',  name: 'Autoloader',    desc: '+6% fire rate',       max: 6, cost: (l) => 50 + l * 40, apply: (p, l) => { p.fireRateMult *= Math.pow(0.94, l); } },
+  { id: 'speed',     name: 'Engine Tuning', desc: '+6% move speed',      max: 6, cost: (l) => 40 + l * 30, apply: (p, l) => { p.speedMult *= (1 + 0.06 * l); } },
+  { id: 'lives',     name: 'Spare Crew',    desc: '+1 starting life',    max: 3, cost: (l) => 120 + l * 120, apply: (p, l, g) => { g.lives += l; } },
+  { id: 'magnet',    name: 'Tractor Beam',  desc: '+25% pickup range',   max: 4, cost: (l) => 40 + l * 30, apply: (p, l) => { p.pickupRange *= (1 + 0.25 * l); } },
+  { id: 'crit',      name: 'Targeting AI',  desc: '+4% crit chance',     max: 5, cost: (l) => 60 + l * 40, apply: (p, l) => { p.critChance += 0.04 * l; } },
+  { id: 'ultcharge', name: 'Capacitor',     desc: '+20% ult charge',     max: 4, cost: (l) => 70 + l * 50, apply: (p, l) => { p.ultGainMult += 0.2 * l; } },
+  { id: 'shield',    name: 'Aegis Start',   desc: 'Begin each run shielded', max: 1, cost: () => 180, apply: (p, l) => { if (l) p.shieldTime = Math.max(p.shieldTime, 8); } },
+  { id: 'startperk', name: 'Veteran',       desc: 'Start with a random perk', max: 1, cost: () => 260, apply: (p, l, g) => { if (l) { const pk = rollPerk(new Set()); pk.apply(p, g); } } },
+];
+
+// XP needed to advance from `level` to `level + 1`.
+function xpForLevel(level) { return Math.round(90 + level * 60); }
+
 function enemyPoolForWave(wave) {
   const pool = ['grunt'];
   if (wave >= 2) pool.push('scout');
