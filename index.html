@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#0a0f16" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <title>TanksALot — Top-Down Tank Survival</title>
+  <link rel="stylesheet" href="css/style.css?v=ui7" />
+</head>
+<body>
+  <div id="stage">
+    <canvas id="game" width="1280" height="720" tabindex="0"></canvas>
+
+    <!-- ============================== HUD ============================== -->
+    <div id="hud" class="hidden">
+      <div class="hud-top">
+        <div class="panel hud-left">
+          <div class="hp-row"><span class="hp-label">HP</span><div id="hp-bar"><div id="hp-fill"></div><div id="hp-text">100 / 100</div></div></div>
+          <div id="stat-lives">❤ ❤ ❤</div>
+          <div class="weapon-row"><span id="weapon-name">Cannon</span><span class="ammo">⦿ <b id="weapon-ammo">∞</b></span></div>
+          <div class="abilities">
+            <div class="ab"><span>DASH</span><div class="ab-bar"><div id="ab-dash" class="ab-fill dash"></div></div></div>
+            <div class="ab"><span>SHOCK</span><div class="ab-bar"><div id="ab-shock" class="ab-fill shock"></div></div></div>
+            <div class="ab"><span>ULT<i id="ult-ready">!</i></span><div class="ab-bar"><div id="ab-ult" class="ab-fill ult"></div></div></div>
+          </div>
+          <div id="buffs"></div>
+        </div>
+        <div class="hud-center">
+          <div class="panel"><div class="big">WAVE <span id="stat-wave">1</span></div><div class="sub">Enemies: <span id="stat-enemies">0</span></div></div>
+          <div id="boss-bar" class="hidden"><div class="boss-label" id="boss-name">BOSS</div><div class="boss-track"><div id="boss-fill"></div></div></div>
+        </div>
+        <div class="hud-right">
+          <div class="panel score-panel"><div class="score-label">SCORE</div><div id="stat-score">0</div><div class="coins">🪙 <span id="stat-coins">0</span></div></div>
+          <canvas id="minimap" width="150" height="150"></canvas>
+        </div>
+      </div>
+      <div id="fps">60 FPS</div>
+      <div id="blitz-timer">⏱ 3:00</div>
+      <div id="p2-panel"><span class="p2-label">P2</span><div class="p2-bar"><div id="p2-hp-fill"></div></div></div>
+      <div id="killfeed"></div>
+      <div id="ach-toasts"></div>
+      <div id="combo">COMBO x2</div>
+      <div id="wave-banner"></div>
+    </div>
+
+    <!-- ====================== MOBILE CONTROLS ========================= -->
+    <div id="mobile-controls" class="hidden">
+      <div id="move-stick" class="stick"><div class="stick-label">MOVE</div><div id="move-knob" class="knob"></div></div>
+      <div id="aim-stick" class="stick aim"><div class="stick-label">AIM · FIRE</div><div id="aim-knob" class="knob"></div></div>
+      <div class="m-actions">
+        <button id="btn-ult" class="m-btn ult">ULT</button>
+        <div class="m-row"><button id="btn-shock" class="m-btn">E</button><button id="btn-dash" class="m-btn dash">⤢</button></div>
+      </div>
+      <div class="m-side"><button id="btn-weapon-m" class="m-btn small">WPN</button><button id="btn-pause-m" class="m-btn small">❚❚</button></div>
+    </div>
+
+    <!-- ============================ LOADING =========================== -->
+    <div id="overlay-loading" class="overlay">
+      <div class="title">TANKS<span class="alt"> A </span>LOT</div><div class="subtitle">LOADING…</div>
+      <div id="load-bar"><div id="load-fill"></div></div><div id="load-pct">0%</div><div id="load-tip" class="controls"></div>
+    </div>
+
+    <!-- ============================ MENU ============================== -->
+    <div id="overlay-menu" class="overlay hidden">
+      <div class="menu-hero">
+        <div class="title">TANKS<span class="alt"> A </span>LOT</div>
+        <div class="subtitle">TOP-DOWN TANK SURVIVAL ROGUELITE</div>
+      </div>
+      <div class="menu-actions">
+        <button id="btn-play" class="btn btn-xl">▶ PLAY</button>
+        <div class="menu-nav">
+          <button id="btn-upgrades" class="btn secondary">⬆ Upgrades</button>
+          <button id="btn-profile" class="btn secondary">👤 Profile</button>
+          <button id="btn-settings" class="btn secondary">⚙ Settings</button>
+        </div>
+      </div>
+      <div class="stats-row"><div class="stat-box"><div class="v" id="menu-level">1</div><div class="l">LEVEL</div></div><div class="stat-box"><div class="v" id="menu-credits">0</div><div class="l">🪙 CREDITS</div></div><div class="stat-box"><div class="v" id="menu-high">0</div><div class="l">HIGH SCORE</div></div><div class="stat-box"><div class="v" id="menu-bestwave">0</div><div class="l">BEST WAVE</div></div><div class="stat-box"><div class="v" id="menu-ach">0/13</div><div class="l">ACHIEVEMENTS</div></div></div>
+      <div class="bottom-row"><button class="btn-mute">🔊 Sound</button></div>
+      <div class="credit">A complete rework of the TCSS-491 "Tank's Alot" project.</div>
+    </div>
+
+    <!-- ========================= MISSION SETUP ======================== -->
+    <div id="overlay-setup" class="overlay hidden">
+      <div class="over-title">MISSION SETUP</div>
+      <div class="setup-grid">
+        <div class="setup-col">
+          <div class="setup-sec">
+            <div class="group-label">GAME MODE</div>
+            <div id="mode-row" class="modes"></div>
+            <div id="mode-desc" class="mode-desc"></div>
+          </div>
+          <div class="setup-sec">
+            <div class="group-label">PLAYERS</div>
+            <div class="pills"><button class="pill" data-players="1">👤 Solo</button><button class="pill" data-players="2">👥 Co-op (2P)</button></div>
+          </div>
+          <div class="setup-sec">
+            <div class="group-label">DIFFICULTY</div>
+            <div class="pills"><button class="pill" data-diff="easy">Easy</button><button class="pill" data-diff="normal">Normal</button><button class="pill" data-diff="hard">Hard</button><button class="pill" data-diff="insane">Insane</button></div>
+          </div>
+        </div>
+        <div class="setup-col">
+          <div class="setup-sec">
+            <div class="group-label">BATTLEFIELD</div>
+            <div class="pills"><button class="pill" data-theme="forest">🌲 Forest</button><button class="pill" data-theme="desert">🏜️ Desert</button><button class="pill" data-theme="arctic">❄️ Arctic</button><button class="pill" data-theme="neon">🌌 Neon</button><button class="pill" data-theme="volcano">🌋 Volcano</button></div>
+          </div>
+          <div class="setup-sec">
+            <div class="group-label">TANK SKIN <span class="hint-sm">(unlock with total coins 🪙)</span></div>
+            <div id="skin-row" class="skins"></div>
+          </div>
+          <div class="setup-sec">
+            <div class="group-label">CONTROLS</div>
+            <div class="controls">
+              <b>Move</b> <span class="key">WASD</span> &nbsp;•&nbsp; <b>Aim/Fire</b> Mouse &nbsp;•&nbsp; <b>Dash</b> <span class="key">Shift</span>/RMB<br/>
+              <b>Shockwave</b> <span class="key">E</span> &nbsp;•&nbsp; <b>Ultimate</b> <span class="key">F</span> &nbsp;•&nbsp; <b>Weapons</b> <span class="key">1</span>–<span class="key">8</span> &nbsp;•&nbsp; <b>Pause</b> <span class="key">Esc</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="btn-row"><button id="btn-start" class="btn btn-xl">▶ START</button><button id="btn-setup-back" class="btn secondary">Back</button></div>
+    </div>
+
+    <!-- =========================== SETTINGS =========================== -->
+    <div id="overlay-settings" class="overlay hidden">
+      <div class="over-title">SETTINGS</div>
+      <div class="card">
+        <div class="setting"><label>Sound FX</label><input id="sfx-slider" type="range" min="0" max="100" value="80" /></div>
+        <div class="setting"><label>Music</label><input id="music-slider" type="range" min="0" max="100" value="45" /></div>
+        <div class="setting"><label>Dynamic Lighting</label><input id="lighting-toggle" type="checkbox" checked /></div>
+        <div class="setting"><label>Screen Flash</label><input id="flash-toggle" type="checkbox" checked /></div>
+        <div class="setting"><label>Screen Shake</label><input id="shake-toggle" type="checkbox" checked /></div>
+        <div class="setting"><label>Weather Effects</label><input id="weather-toggle" type="checkbox" checked /></div>
+        <div class="setting"><label>Show FPS</label><input id="fps-toggle" type="checkbox" /></div>
+        <div class="btn-row" style="margin-top:16px;"><button class="btn-mute btn secondary">🔊 Sound</button><button id="btn-settings-back" class="btn">Back</button></div>
+      </div>
+    </div>
+
+    <!-- ===================== META UPGRADES (shop) ==================== -->
+    <div id="overlay-upgrades" class="overlay hidden">
+      <div class="over-title">UPGRADES</div>
+      <div class="subtitle">Permanent upgrades — balance: 🪙 <span id="shop-credits">0</span></div>
+      <div id="shop-grid" class="shop-grid"></div>
+      <div class="btn-row"><button id="btn-shop-back" class="btn">Back</button></div>
+    </div>
+
+    <!-- =========================== PROFILE =========================== -->
+    <div id="overlay-profile" class="overlay hidden">
+      <div class="over-title">PROFILE</div>
+      <div id="profile-body" class="card profile-body"></div>
+      <div class="btn-row"><button id="btn-profile-back" class="btn">Back</button></div>
+    </div>
+
+    <!-- ===================== PERK DRAFT (in-run) ===================== -->
+    <div id="overlay-upgrade" class="overlay hidden">
+      <div class="over-title win">CHOOSE A PERK</div><div class="subtitle">Wave cleared — pick an upgrade</div>
+      <div class="perk-row">
+        <div class="perk-card" id="perk-0"><div class="perk-rarity">—</div><div class="perk-name">—</div><div class="perk-desc">—</div></div>
+        <div class="perk-card" id="perk-1"><div class="perk-rarity">—</div><div class="perk-name">—</div><div class="perk-desc">—</div></div>
+        <div class="perk-card" id="perk-2"><div class="perk-rarity">—</div><div class="perk-name">—</div><div class="perk-desc">—</div></div>
+      </div>
+      <div class="btn-row"><button id="btn-reroll" class="btn secondary">🎲 Reroll (🪙 30)</button><span class="reroll-coins">You have 🪙 <span id="upgrade-coins">0</span></span></div>
+    </div>
+
+    <!-- ============================ PAUSE ============================= -->
+    <div id="overlay-pause" class="overlay hidden">
+      <div class="over-title">PAUSED</div>
+      <div class="card">
+        <div class="controls" style="margin-bottom:18px;"><b>Move</b> <span class="key">WASD</span> • <b>Dash</b> <span class="key">Shift</span> • <b>Shock</b> <span class="key">E</span> • <b>Ult</b> <span class="key">F</span> • <b>Weapons</b> <span class="key">1</span>–<span class="key">8</span></div>
+        <div class="btn-row"><button id="btn-resume" class="btn">▶ RESUME</button><button id="btn-settings-pause" class="btn secondary">⚙ Settings</button><button id="btn-restart" class="btn secondary">↻ Restart</button><button id="btn-quit" class="btn secondary">✕ Menu</button></div>
+      </div>
+    </div>
+
+    <!-- ========================== GAME OVER ========================== -->
+    <div id="overlay-gameover" class="overlay hidden">
+      <div class="over-title lose" id="go-title">GAME OVER</div>
+      <div class="card">
+        <div class="stats-row">
+          <div class="stat-box"><div class="v" id="go-score">0</div><div class="l">SCORE</div></div>
+          <div class="stat-box"><div class="v" id="go-wave">0</div><div class="l">WAVE</div></div>
+          <div class="stat-box"><div class="v" id="go-kills">0</div><div class="l">KILLS</div></div>
+          <div class="stat-box"><div class="v" id="go-combo">x0</div><div class="l">BEST COMBO</div></div>
+          <div class="stat-box"><div class="v" id="go-time">0:00</div><div class="l">TIME</div></div>
+          <div class="stat-box"><div class="v" id="go-high">0</div><div class="l">HIGH SCORE</div></div>
+        </div>
+        <div class="reward-row">EARNED <b id="go-credits">+0</b> 🪙 &nbsp;•&nbsp; <b id="go-xp">+0</b> XP</div>
+        <div class="btn-row" style="margin-top:18px;"><button id="btn-retry" class="btn">↻ RETRY</button><button id="btn-menu" class="btn secondary">Main Menu</button></div>
+      </div>
+    </div>
+
+    <!-- =========================== VICTORY =========================== -->
+    <div id="overlay-victory" class="overlay hidden">
+      <div class="over-title win">VICTORY!</div><div class="subtitle">You destroyed the final boss and cleared all 20 waves.</div>
+      <div class="card">
+        <div class="stats-row"><div class="stat-box"><div class="v" id="vic-score">0</div><div class="l">SCORE</div></div><div class="stat-box"><div class="v" id="vic-high">0</div><div class="l">HIGH SCORE</div></div></div>
+        <div class="reward-row">EARNED <b id="vic-credits">+0</b> 🪙 &nbsp;•&nbsp; <b id="vic-xp">+0</b> XP</div>
+        <div class="btn-row" style="margin-top:18px;"><button id="btn-vic-continue" class="btn">⤴ Endless Mode</button><button id="btn-vic-menu" class="btn secondary">Main Menu</button></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/engine.js?v=ui7"></script>
+  <script src="js/entities.js?v=ui7"></script>
+  <script src="js/world.js?v=ui7"></script>
+  <script src="js/game.js?v=ui7"></script>
+</body>
+</html>
