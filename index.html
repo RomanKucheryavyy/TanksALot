@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="mobile-web-app-capable" content="yes" />
   <title>TanksALot — Top-Down Tank Survival</title>
-  <link rel="stylesheet" href="css/style.css?v=mode5" />
+  <link rel="stylesheet" href="css/style.css?v=coop6" />
 </head>
 <body>
   <div id="stage">
@@ -38,6 +38,7 @@
       </div>
       <div id="fps">60 FPS</div>
       <div id="blitz-timer">⏱ 3:00</div>
+      <div id="p2-panel"><span class="p2-label">P2</span><div class="p2-bar"><div id="p2-hp-fill"></div></div></div>
       <div id="killfeed"></div>
       <div id="ach-toasts"></div>
       <div id="combo">COMBO x2</div>
@@ -68,6 +69,8 @@
         <div class="group-label">GAME MODE</div>
         <div id="mode-row" class="modes"></div>
         <div id="mode-desc" class="mode-desc"></div>
+        <div class="group-label">PLAYERS</div>
+        <div class="pills"><button class="pill" data-players="1">👤 Solo</button><button class="pill" data-players="2">👥 Co-op (2P)</button></div>
         <div class="group-label">DIFFICULTY</div>
         <div class="pills"><button class="pill" data-diff="easy">Easy</button><button class="pill" data-diff="normal">Normal</button><button class="pill" data-diff="hard">Hard</button><button class="pill" data-diff="insane">Insane</button></div>
         <div class="group-label">BATTLEFIELD</div>
@@ -164,9 +167,9 @@
     </div>
   </div>
 
-  <script src="js/engine.js?v=mode5"></script>
-  <script src="js/entities.js?v=mode5"></script>
-  <script src="js/world.js?v=mode5"></script>
-  <script src="js/game.js?v=mode5"></script>
+  <script src="js/engine.js?v=coop6"></script>
+  <script src="js/entities.js?v=coop6"></script>
+  <script src="js/world.js?v=coop6"></script>
+  <script src="js/game.js?v=coop6"></script>
 </body>
 </html>
