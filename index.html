@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="mobile-web-app-capable" content="yes" />
   <title>TanksALot — Top-Down Tank Survival</title>
-  <link rel="stylesheet" href="css/style.css?v=coop6" />
+  <link rel="stylesheet" href="css/style.css?v=ui7" />
 </head>
 <body>
   <div id="stage">
@@ -64,29 +64,61 @@
 
     <!-- ============================ MENU ============================== -->
     <div id="overlay-menu" class="overlay hidden">
-      <div class="title">TANKS<span class="alt"> A </span>LOT</div><div class="subtitle">TOP-DOWN TANK SURVIVAL</div>
-      <div class="card">
-        <div class="group-label">GAME MODE</div>
-        <div id="mode-row" class="modes"></div>
-        <div id="mode-desc" class="mode-desc"></div>
-        <div class="group-label">PLAYERS</div>
-        <div class="pills"><button class="pill" data-players="1">👤 Solo</button><button class="pill" data-players="2">👥 Co-op (2P)</button></div>
-        <div class="group-label">DIFFICULTY</div>
-        <div class="pills"><button class="pill" data-diff="easy">Easy</button><button class="pill" data-diff="normal">Normal</button><button class="pill" data-diff="hard">Hard</button><button class="pill" data-diff="insane">Insane</button></div>
-        <div class="group-label">BATTLEFIELD</div>
-        <div class="pills"><button class="pill" data-theme="forest">🌲 Forest</button><button class="pill" data-theme="desert">🏜️ Desert</button><button class="pill" data-theme="arctic">❄️ Arctic</button><button class="pill" data-theme="neon">🌌 Neon</button><button class="pill" data-theme="volcano">🌋 Volcano</button></div>
-        <div class="group-label">TANK SKIN <span class="hint-sm">(unlock with total coins 🪙)</span></div>
-        <div id="skin-row" class="skins"></div>
-        <div class="btn-row" style="margin:6px 0 12px;"><button id="btn-play" class="btn">▶ PLAY</button><button id="btn-upgrades" class="btn secondary">⬆ Upgrades</button><button id="btn-profile" class="btn secondary">👤 Profile</button><button id="btn-settings" class="btn secondary">⚙</button></div>
-        <div class="controls">
-          <b>Move</b> <span class="key">WASD</span> &nbsp;•&nbsp; <b>Aim/Fire</b> Mouse &nbsp;•&nbsp; <b>Dash</b> <span class="key">Shift</span>/RMB<br/>
-          <b>Shockwave</b> <span class="key">E</span> &nbsp;•&nbsp; <b>Ultimate</b> <span class="key">F</span> &nbsp;•&nbsp; <b>Weapons</b> <span class="key">1</span>–<span class="key">8</span>/Wheel &nbsp;•&nbsp; <b>Pause</b> <span class="key">Esc</span><br/>
-          8 weapons • 18 perks • elites & bosses • 5 battlefields. Survive 20 waves.
+      <div class="menu-hero">
+        <div class="title">TANKS<span class="alt"> A </span>LOT</div>
+        <div class="subtitle">TOP-DOWN TANK SURVIVAL ROGUELITE</div>
+      </div>
+      <div class="menu-actions">
+        <button id="btn-play" class="btn btn-xl">▶ PLAY</button>
+        <div class="menu-nav">
+          <button id="btn-upgrades" class="btn secondary">⬆ Upgrades</button>
+          <button id="btn-profile" class="btn secondary">👤 Profile</button>
+          <button id="btn-settings" class="btn secondary">⚙ Settings</button>
         </div>
       </div>
       <div class="stats-row"><div class="stat-box"><div class="v" id="menu-level">1</div><div class="l">LEVEL</div></div><div class="stat-box"><div class="v" id="menu-credits">0</div><div class="l">🪙 CREDITS</div></div><div class="stat-box"><div class="v" id="menu-high">0</div><div class="l">HIGH SCORE</div></div><div class="stat-box"><div class="v" id="menu-bestwave">0</div><div class="l">BEST WAVE</div></div><div class="stat-box"><div class="v" id="menu-ach">0/13</div><div class="l">ACHIEVEMENTS</div></div></div>
       <div class="bottom-row"><button class="btn-mute">🔊 Sound</button></div>
       <div class="credit">A complete rework of the TCSS-491 "Tank's Alot" project.</div>
+    </div>
+
+    <!-- ========================= MISSION SETUP ======================== -->
+    <div id="overlay-setup" class="overlay hidden">
+      <div class="over-title">MISSION SETUP</div>
+      <div class="setup-grid">
+        <div class="setup-col">
+          <div class="setup-sec">
+            <div class="group-label">GAME MODE</div>
+            <div id="mode-row" class="modes"></div>
+            <div id="mode-desc" class="mode-desc"></div>
+          </div>
+          <div class="setup-sec">
+            <div class="group-label">PLAYERS</div>
+            <div class="pills"><button class="pill" data-players="1">👤 Solo</button><button class="pill" data-players="2">👥 Co-op (2P)</button></div>
+          </div>
+          <div class="setup-sec">
+            <div class="group-label">DIFFICULTY</div>
+            <div class="pills"><button class="pill" data-diff="easy">Easy</button><button class="pill" data-diff="normal">Normal</button><button class="pill" data-diff="hard">Hard</button><button class="pill" data-diff="insane">Insane</button></div>
+          </div>
+        </div>
+        <div class="setup-col">
+          <div class="setup-sec">
+            <div class="group-label">BATTLEFIELD</div>
+            <div class="pills"><button class="pill" data-theme="forest">🌲 Forest</button><button class="pill" data-theme="desert">🏜️ Desert</button><button class="pill" data-theme="arctic">❄️ Arctic</button><button class="pill" data-theme="neon">🌌 Neon</button><button class="pill" data-theme="volcano">🌋 Volcano</button></div>
+          </div>
+          <div class="setup-sec">
+            <div class="group-label">TANK SKIN <span class="hint-sm">(unlock with total coins 🪙)</span></div>
+            <div id="skin-row" class="skins"></div>
+          </div>
+          <div class="setup-sec">
+            <div class="group-label">CONTROLS</div>
+            <div class="controls">
+              <b>Move</b> <span class="key">WASD</span> &nbsp;•&nbsp; <b>Aim/Fire</b> Mouse &nbsp;•&nbsp; <b>Dash</b> <span class="key">Shift</span>/RMB<br/>
+              <b>Shockwave</b> <span class="key">E</span> &nbsp;•&nbsp; <b>Ultimate</b> <span class="key">F</span> &nbsp;•&nbsp; <b>Weapons</b> <span class="key">1</span>–<span class="key">8</span> &nbsp;•&nbsp; <b>Pause</b> <span class="key">Esc</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="btn-row"><button id="btn-start" class="btn btn-xl">▶ START</button><button id="btn-setup-back" class="btn secondary">Back</button></div>
     </div>
 
     <!-- =========================== SETTINGS =========================== -->
@@ -167,9 +199,9 @@
     </div>
   </div>
 
-  <script src="js/engine.js?v=coop6"></script>
-  <script src="js/entities.js?v=coop6"></script>
-  <script src="js/world.js?v=coop6"></script>
-  <script src="js/game.js?v=coop6"></script>
+  <script src="js/engine.js?v=ui7"></script>
+  <script src="js/entities.js?v=ui7"></script>
+  <script src="js/world.js?v=ui7"></script>
+  <script src="js/game.js?v=ui7"></script>
 </body>
 </html>

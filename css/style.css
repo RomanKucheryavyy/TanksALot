@@ -123,7 +123,23 @@ body.is-touch #game { cursor: default; }
 .modebtn:hover { background: rgba(255,255,255,0.1); }
 .modebtn.active { border-color: var(--accent2); background: rgba(79,207,106,0.12); }
 .modebtn .mi { font-size: 22px; } .modebtn .mn { font-size: 12px; font-weight: bold; }
-.mode-desc { font-size: 12px; color: var(--muted); margin-bottom: 14px; min-height: 16px; }
+.mode-desc { font-size: 12px; color: var(--muted); min-height: 16px; }
+
+/* clean landing menu */
+.menu-hero { margin-bottom: 6px; }
+.menu-actions { display: flex; flex-direction: column; align-items: center; gap: 14px; margin: 10px 0 4px; }
+.menu-nav { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+.btn-xl { font-size: 22px; padding: 16px 60px; box-shadow: 0 5px 0 #b8902f; }
+.btn-xl:hover { box-shadow: 0 6px 0 #b8902f; }
+
+/* roomy mission-setup screen (two columns on wide screens) */
+.setup-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px 40px; max-width: 900px; width: 100%; text-align: left; }
+.setup-col { display: flex; flex-direction: column; gap: 20px; }
+.setup-sec { background: var(--panel-soft); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+.setup-sec .group-label { margin-bottom: 10px; }
+.setup-sec .pills, .setup-sec .modes, .setup-sec .skins { justify-content: flex-start; margin-bottom: 0; }
+.setup-sec .mode-desc { margin-top: 8px; }
+.setup-sec .controls { text-align: left; }
 
 /* meta shop */
 .shop-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; max-width: 760px; width: 100%; }
@@ -181,6 +197,8 @@ body.is-touch #game { cursor: default; }
 
 /* ----------------------------- Responsive ------------------------------- */
 @media (max-width: 760px) {
+  .setup-grid { grid-template-columns: 1fr; gap: 14px; }
+  .btn-xl { font-size: 18px; padding: 13px 44px; }
   .title { font-size: 44px; } .over-title { font-size: 34px; } .subtitle { font-size: 12px; letter-spacing: 2px; }
   #hud { font-size: 12px; } .hud-top { padding: 6px 8px; gap: 6px; } .panel { padding: 6px 8px; }
   .hud-left { min-width: 150px; } #hp-bar { height: 13px; } .abilities { gap: 5px; }
