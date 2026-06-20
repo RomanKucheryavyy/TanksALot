@@ -427,10 +427,12 @@ class Game {
 
   /* ----------------------------- UI wiring ----------------------------- */
   _bindUI() {
-    document.querySelectorAll('[data-diff]').forEach((b) => b.addEventListener('click', () => { this.difficulty = b.dataset.diff; this._updateMenuUI(); }));
-    document.querySelectorAll('[data-theme]').forEach((b) => b.addEventListener('click', () => { this.theme = b.dataset.theme; this._updateMenuUI(); }));
-    document.querySelectorAll('[data-players]').forEach((b) => b.addEventListener('click', () => { this.coop = b.dataset.players === '2'; Storage.set('coop', this.coop); this._updateMenuUI(); }));
-    document.getElementById('btn-play').addEventListener('click', () => { this.audio._ensure(); this.newGame(); });
+    document.querySelectorAll('[data-diff]').forEach((b) => b.addEventListener('click', () => { this.difficulty = b.dataset.diff; this._updateSetupUI(); }));
+    document.querySelectorAll('[data-theme]').forEach((b) => b.addEventListener('click', () => { this.theme = b.dataset.theme; this._updateSetupUI(); }));
+    document.querySelectorAll('[data-players]').forEach((b) => b.addEventListener('click', () => { this.coop = b.dataset.players === '2'; Storage.set('coop', this.coop); this._updateSetupUI(); }));
+    document.getElementById('btn-play').addEventListener('click', () => { this.audio._ensure(); this._showOverlay('setup'); this._updateSetupUI(); });
+    document.getElementById('btn-start').addEventListener('click', () => { this.audio._ensure(); this.newGame(); });
+    document.getElementById('btn-setup-back').addEventListener('click', () => { this._showOverlay('menu'); this._updateMenuUI(); });
     document.getElementById('btn-resume').addEventListener('click', () => this.resume());
     document.getElementById('btn-restart').addEventListener('click', () => this.newGame());
     document.getElementById('btn-quit').addEventListener('click', () => this._toMenu());
@@ -498,7 +500,17 @@ class Game {
   }
   _syncSettings() { document.getElementById('sfx-slider').value = Math.round(this.audio.sfxVolume * 100); document.getElementById('music-slider').value = Math.round(this.audio.musicVolume * 100); document.getElementById('shake-toggle').checked = this.settings.shake; document.getElementById('weather-toggle').checked = this.settings.weather; document.getElementById('lighting-toggle').checked = this.settings.lighting; document.getElementById('flash-toggle').checked = this.settings.flash; document.getElementById('fps-toggle').checked = this.settings.fps; }
   _toMenu() { this.state = STATE.MENU; this._showOverlay('menu'); this._updateMenuUI(); this.audio.startMusic('Sounds/BGM.mp3'); }
-  _updateMenuUI() { document.querySelectorAll('[data-diff]').forEach((b) => b.classList.toggle('active', b.dataset.diff === this.difficulty)); document.querySelectorAll('[data-theme]').forEach((b) => b.classList.toggle('active', b.dataset.theme === this.theme)); document.querySelectorAll('[data-players]').forEach((b) => b.classList.toggle('active', (b.dataset.players === '2') === this.coop)); document.getElementById('menu-high').textContent = this.highScore.toLocaleString(); document.getElementById('menu-bestwave').textContent = this.bestWave; document.getElementById('menu-ach').textContent = this.achievements.size + '/' + ACHIEVEMENTS.length; document.getElementById('menu-level').textContent = this.profile.level; document.getElementById('menu-credits').textContent = this.profile.credits.toLocaleString(); this._renderSkins(); this._renderModes(); }
+  _updateMenuUI() {
+    document.getElementById('menu-high').textContent = this.highScore.toLocaleString(); document.getElementById('menu-bestwave').textContent = this.bestWave;
+    document.getElementById('menu-ach').textContent = this.achievements.size + '/' + ACHIEVEMENTS.length;
+    document.getElementById('menu-level').textContent = this.profile.level; document.getElementById('menu-credits').textContent = this.profile.credits.toLocaleString();
+  }
+  _updateSetupUI() {
+    document.querySelectorAll('[data-diff]').forEach((b) => b.classList.toggle('active', b.dataset.diff === this.difficulty));
+    document.querySelectorAll('[data-theme]').forEach((b) => b.classList.toggle('active', b.dataset.theme === this.theme));
+    document.querySelectorAll('[data-players]').forEach((b) => b.classList.toggle('active', (b.dataset.players === '2') === this.coop));
+    this._renderSkins(); this._renderModes();
+  }
   _showOverlay(name) { this._hideOverlays(); const el = document.getElementById('overlay-' + name); if (el) el.classList.remove('hidden'); this._syncHud(); }
   _hideOverlays() { document.querySelectorAll('.overlay').forEach((o) => o.classList.add('hidden')); this._syncHud(); }
   _syncHud() { const playing = this.state === STATE.PLAYING || this.state === STATE.PAUSED || this.state === STATE.UPGRADE; document.getElementById('hud').classList.toggle('hidden', !playing); if (this.mobile) this.mobile.show(this.state === STATE.PLAYING); }
