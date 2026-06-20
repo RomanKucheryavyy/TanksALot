@@ -163,7 +163,7 @@ class Strike {
     this.t += dt;
     if (this.t >= this.delay) {
       this.dead = true; this.game.spawnExplosion(this.x, this.y, this.r / 60); this.game.addDecal(new Decal(this.x, this.y, this.r * 0.7)); this.game.camera.shake(6, 0.2);
-      const targets = this.team === 'enemy' ? (this.game.player && this.game.player.alive ? [this.game.player] : []) : this.game.enemies;
+    const targets = this.team === 'enemy' ? this.game.alivePlayers() : this.game.enemies;
       for (const tk of targets) { if (!tk.alive) continue; const d = Util.dist(this.x, this.y, tk.x, tk.y); if (d < this.r) tk.takeDamage(this.dmg * (1 - d / this.r), Util.angleTo(this.x, this.y, tk.x, tk.y), this.team !== 'enemy', {}); }
     }
   }
@@ -218,7 +218,7 @@ class PowerUp {
   constructor(game, x, y, type) { this.game = game; this.x = x; this.y = y; this.type = type; this.radius = 16; this.bob = Math.random() * TAU; this.life = 20; this.dead = false; }
   update(dt) {
     this.bob += dt * 3; this.life -= dt; if (this.life <= 0) { this.dead = true; return; }
-    const p = this.game.player;
+    const p = this.game.nearestPlayer(this.x, this.y);
     if (p && p.alive) { const d = Util.dist(this.x, this.y, p.x, p.y), mag = p.pickupRange || 120; if (d < mag) { const a = Util.angleTo(this.x, this.y, p.x, p.y), pull = (mag - d) * 2.2; this.x += Math.cos(a) * pull * dt; this.y += Math.sin(a) * pull * dt; } if (d < this.radius + p.radius) this._collect(p); }
   }
   _collect(p) {
@@ -251,14 +251,14 @@ class Coin {
   constructor(game, x, y, value = 1) { this.game = game; this.x = x; this.y = y; this.value = value; this.radius = 9; this.bob = Math.random() * TAU; this.life = 22; this.dead = false; this.vx = Util.rand(-60, 60); this.vy = Util.rand(-60, 60); }
   update(dt) {
     this.bob += dt * 6; this.life -= dt; if (this.life <= 0) { this.dead = true; return; } this.x += this.vx * dt; this.y += this.vy * dt; this.vx *= 0.9; this.vy *= 0.9;
-    const p = this.game.player;
+    const p = this.game.nearestPlayer(this.x, this.y);
     if (p && p.alive) { const d = Util.dist(this.x, this.y, p.x, p.y), mag = p.pickupRange || 120; if (d < mag) { const a = Util.angleTo(this.x, this.y, p.x, p.y), pull = (mag - d) * 2.6; this.x += Math.cos(a) * pull * dt; this.y += Math.sin(a) * pull * dt; } if (d < this.radius + p.radius) { this.dead = true; this.game.onCoinCollected(this.value); this.game.audio.coin(); } }
   }
   draw(ctx) { const s = 1 + Math.sin(this.bob) * 0.18, blink = this.life < 4 && Math.floor(this.life * 6) % 2 === 0; ctx.save(); ctx.translate(this.x, this.y); if (blink) ctx.globalAlpha = 0.45; ctx.shadowColor = '#ffcf3a'; ctx.shadowBlur = 10; ctx.fillStyle = '#ffcf3a'; ctx.beginPath(); ctx.ellipse(0, 0, this.radius * s, this.radius, 0, 0, TAU); ctx.fill(); ctx.shadowBlur = 0; ctx.fillStyle = '#b8902f'; ctx.beginPath(); ctx.ellipse(0, 0, this.radius * 0.55 * s, this.radius * 0.55, 0, 0, TAU); ctx.fill(); ctx.restore(); }
 }
 class WeaponCrate {
   constructor(game, x, y, weaponKey) { this.game = game; this.x = x; this.y = y; this.weaponKey = weaponKey; this.radius = 18; this.bob = Math.random() * TAU; this.life = 30; this.dead = false; }
-  update(dt) { this.bob += dt * 2.5; this.life -= dt; if (this.life <= 0) { this.dead = true; return; } const p = this.game.player; if (p && p.alive && Util.dist(this.x, this.y, p.x, p.y) < this.radius + p.radius) { this.dead = true; p.giveWeapon(this.weaponKey); this.game.audio.powerHit(); const w = WEAPONS[this.weaponKey]; this.game.addFloatingText(this.x, this.y - 12, w.name.toUpperCase(), { color: w.color, size: 18 }); } }
+  update(dt) { this.bob += dt * 2.5; this.life -= dt; if (this.life <= 0) { this.dead = true; return; } const p = this.game.nearestPlayer(this.x, this.y); if (p && p.alive && Util.dist(this.x, this.y, p.x, p.y) < this.radius + p.radius) { this.dead = true; p.giveWeapon(this.weaponKey); this.game.audio.powerHit(); const w = WEAPONS[this.weaponKey]; this.game.addFloatingText(this.x, this.y - 12, w.name.toUpperCase(), { color: w.color, size: 18 }); } }
   draw(ctx) { const w = WEAPONS[this.weaponKey], yoff = Math.sin(this.bob) * 3; ctx.save(); ctx.translate(this.x, this.y + yoff); ctx.shadowColor = w.color; ctx.shadowBlur = 16; ctx.fillStyle = '#2b3340'; roundRectPath(ctx, -this.radius, -this.radius, this.radius * 2, this.radius * 2, 5); ctx.fill(); ctx.shadowBlur = 0; ctx.strokeStyle = w.color; ctx.lineWidth = 3; roundRectPath(ctx, -this.radius, -this.radius, this.radius * 2, this.radius * 2, 5); ctx.stroke(); ctx.fillStyle = w.color; ctx.font = 'bold 16px Trebuchet MS'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(w.name[0], 0, 1); ctx.restore(); }
 }
 
@@ -361,7 +361,7 @@ class Bullet {
         if (this.explode || this.splash) { this._boom(); return; } this._impact(false); return;
       }
     }
-    const targets = this.team === 'player' ? this.game.enemies : (this.game.player && this.game.player.alive ? [this.game.player] : []);
+    const targets = this.team === 'player' ? this.game.enemies : this.game.alivePlayers();
     for (const t of targets) {
       if (!t.alive || this._hit.has(t)) continue; const rr = t.radius + this.radius;
       if (Util.dist2(this.x, this.y, t.x, t.y) <= rr * rr) {
@@ -379,7 +379,7 @@ class Bullet {
   }
   _boom() {
     this.dead = true; const r = this.splash || this.explode; this.game.spawnExplosion(this.x, this.y, r > 80 ? 0.9 : 0.6); this.game.addDecal(new Decal(this.x, this.y, r * 0.5)); this.game.camera.shake(4, 0.15);
-    for (const t of (this.team === 'player' ? this.game.enemies : (this.game.player && this.game.player.alive ? [this.game.player] : []))) { if (!t.alive) continue; const d = Util.dist(this.x, this.y, t.x, t.y); if (d < r) t.takeDamage(this.damage * (1 - d / r), Util.angleTo(this.x, this.y, t.x, t.y), this.team === 'player', { burn: this.burn }); }
+    for (const t of (this.team === 'player' ? this.game.enemies : this.game.alivePlayers())) { if (!t.alive) continue; const d = Util.dist(this.x, this.y, t.x, t.y); if (d < r) t.takeDamage(this.damage * (1 - d / r), Util.angleTo(this.x, this.y, t.x, t.y), this.team === 'player', { burn: this.burn }); }
   }
   _impact(hitTank) { this.dead = true; this.game.audio.hit(); const n = hitTank ? 9 : 5; for (let i = 0; i < n; i++) { const a = Util.rand(0, TAU), sp = Util.rand(40, 160); this.game.addParticle(new Particle(this.x, this.y, { vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: Util.rand(0.2, 0.4), size: Util.rand(2, 4), color: hitTank ? this.color : '#d9d2c5', fade: true, shrink: true, add: hitTank })); } }
   draw(ctx) {
@@ -407,6 +407,7 @@ class PlayerTank extends Tank {
     // controller (local input now; could be network/AI later). The sim never
     // reads the keyboard/mouse directly, which is the groundwork for online.
     this.command = { mx: 0, my: 0, aimAngle: this.bodyAngle, fire: false, dash: false, shock: false, ult: false, cycle: 0, select: -1 };
+    this._respawnTimer = 0; this.pid = 0; // player index (for co-op HUD/colours)
   }
   giveWeapon(key) { const w = WEAPONS[key]; if (this.weapons[key] === undefined) { this.weapons[key] = w.ammo || 0; this.weaponOrder.push(key); } else this.weapons[key] += w.ammo || 0; this.weapon = key; }
   cycleWeapon(d) { const i = this.weaponOrder.indexOf(this.weapon); this.weapon = this.weaponOrder[(i + d + this.weaponOrder.length) % this.weaponOrder.length]; }
@@ -417,7 +418,7 @@ class PlayerTank extends Tank {
     if (this.invuln > 0 || this.dashTime > 0) return false;
     if (this.dodgeChance > 0 && Util.chance(this.dodgeChance)) { this.game.addFloatingText(this.x, this.y - this.radius - 8, 'DODGE', { color: '#7df9ff', size: 14 }); return false; }
     const killed = super.takeDamage(amount, fromAngle, fromPlayer, opts);
-    if (killed && this.reviveCharges > 0) { this.reviveCharges--; this.alive = true; this.hp = this.maxHp * 0.6; this.invuln = 2.5; this.shieldTime = 3; this.game.onRevive(); return false; }
+    if (killed && this.reviveCharges > 0) { this.reviveCharges--; this.alive = true; this.hp = this.maxHp * 0.6; this.invuln = 2.5; this.shieldTime = 3; this.game.onRevive(this); return false; }
     return killed;
   }
   dash() {
@@ -513,7 +514,7 @@ class EnemyTank extends Tank {
   fire() { if (this.fireCooldown > 0) return; this.fireCooldown = this.fireRate; this.recoil = 5; const tipX = this.x + Math.cos(this.turretAngle) * this.barrelLength, tipY = this.y + Math.sin(this.turretAngle) * this.barrelLength; this.game.addBullet(new Bullet(this.game, tipX, tipY, this.turretAngle, { speed: this.bulletSpeed, damage: this.bulletDamage, team: 'enemy', radius: this.bulletRadius, kind: this.kind, splash: this.splash })); this.game.audio.enemyShoot(); }
   update(dt) {
     if (!this.alive) return; this.updateTimers(dt); if (this.fireCooldown > 0) this.fireCooldown -= dt;
-    const player = this.game.player; if (!player || !player.alive) { this._wander(dt); return; }
+    const player = this.game.nearestPlayer(this.x, this.y); if (!player) { this._wander(dt); return; }
     const d = Util.dist(this.x, this.y, player.x, player.y); if (d < this.detect) this.aggro = true; if (!this.aggro) { this._wander(dt); return; }
     const toPlayer = Util.angleTo(this.x, this.y, player.x, player.y);
     if (this.kamikaze) { this._kamikaze(dt, d, toPlayer, player); return; }
@@ -532,7 +533,7 @@ class EnemyTank extends Tank {
   _detonate(player) { this.game.spawnExplosion(this.x, this.y, 1.3); this.game.addDecal(new Decal(this.x, this.y, 60)); this.game.camera.shake(9, 0.3); this.game.audio.explosion(1.2); for (const t of this.game.allTanks()) { if (!t.alive || t === this) continue; const dd = Util.dist(this.x, this.y, t.x, t.y); if (dd < 110) t.takeDamage(40 * (1 - dd / 110), Util.angleTo(this.x, this.y, t.x, t.y), false, {}); } this.alive = false; this.hp = 0; this.game.onTankDestroyed(this, false); }
   _separation() { let x = 0, y = 0; for (const e of this.game.enemies) { if (e === this || !e.alive) continue; const dx = this.x - e.x, dy = this.y - e.y, dd = Math.hypot(dx, dy); if (dd > 0 && dd < this.radius * 3) { x += dx / dd; y += dy / dd; } } return { x, y }; }
   _wander(dt) { this.wanderTimer -= dt; if (this.wanderTimer <= 0) { this.wanderAngle = Util.rand(0, TAU); this.wanderTimer = Util.rand(2, 4); } this.bodyAngle = Util.rotateToward(this.bodyAngle, this.wanderAngle, this.turnSpeed * 0.5 * dt); this.moveBy(Math.cos(this.wanderAngle) * this.speed * 0.4 * dt, Math.sin(this.wanderAngle) * this.speed * 0.4 * dt, dt); this.aimTurret(this.bodyAngle, dt); }
-  draw(ctx) { super.draw(ctx); if (this.sniper && this.charge > 0 && this.alive && this.game.player && this.game.player.alive && this.game.camera.visible(this.x, this.y, 200)) { ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.25 + 0.4 * this.charge; ctx.strokeStyle = '#ff4d4d'; ctx.lineWidth = 1 + this.charge; ctx.beginPath(); ctx.moveTo(this.x, this.y); ctx.lineTo(this.x + Math.cos(this.turretAngle) * 900, this.y + Math.sin(this.turretAngle) * 900); ctx.stroke(); ctx.restore(); } }
+  draw(ctx) { super.draw(ctx); if (this.sniper && this.charge > 0 && this.alive && this.game.alivePlayers().length && this.game.camera.visible(this.x, this.y, 200)) { ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.25 + 0.4 * this.charge; ctx.strokeStyle = '#ff4d4d'; ctx.lineWidth = 1 + this.charge; ctx.beginPath(); ctx.moveTo(this.x, this.y); ctx.lineTo(this.x + Math.cos(this.turretAngle) * 900, this.y + Math.sin(this.turretAngle) * 900); ctx.stroke(); ctx.restore(); } }
 }
 
 /* ------------------------------- Boss ----------------------------------- */
@@ -549,7 +550,7 @@ class Boss extends Tank {
   hasLineOfSight() { return true; }
   update(dt) {
     if (!this.alive) return; this.updateTimers(dt); if (this.fireCooldown > 0) this.fireCooldown -= dt;
-    const player = this.game.player; if (!player || !player.alive) return;
+    const player = this.game.nearestPlayer(this.x, this.y); if (!player) return;
     const ratio = this.hp / this.maxHp; const np = ratio < 0.33 ? 3 : (ratio < 0.66 ? 2 : 1); if (np !== this.phase) { this.phase = np; this.game.onBossPhase(this, this.phase); }
     const d = Util.dist(this.x, this.y, player.x, player.y), toPlayer = Util.angleTo(this.x, this.y, player.x, player.y);
     // movement: orbit + maintain range

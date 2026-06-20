@@ -157,6 +157,10 @@ body.is-touch #game { cursor: default; }
 .reward-row { font-size: 14px; color: var(--muted); margin-top: 10px; } .reward-row b { color: #ffcf3a; }
 #blitz-timer { position: absolute; top: 84px; left: 50%; transform: translateX(-50%); font-size: 22px; font-weight: bold; color: #fff; background: rgba(0,0,0,0.45); padding: 2px 14px; border-radius: 8px; display: none; }
 #blitz-timer.low { color: #ff5a4d; animation: blink 0.6s steps(2) infinite; }
+#p2-panel { position: absolute; bottom: 14px; right: 16px; background: var(--panel-soft); border: 1px solid #46c46a; border-radius: 8px; padding: 6px 10px; display: none; }
+.p2-label { font-size: 11px; font-weight: bold; color: #5fcf6a; letter-spacing: 1px; }
+.p2-bar { width: 120px; height: 10px; background: rgba(0,0,0,0.5); border-radius: 6px; overflow: hidden; margin-top: 3px; }
+#p2-hp-fill { height: 100%; width: 100%; background: #4fcf6a; transition: width 0.12s linear; }
 
 /* -------------------------- Mobile controls ----------------------------- */
 #mobile-controls { position: absolute; inset: 0; z-index: 7; pointer-events: none; }

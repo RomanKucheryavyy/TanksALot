@@ -119,6 +119,35 @@ The full original prototype is preserved under [`legacy/`](legacy/).
 
 ---
 
+## 🎮 Game modes & progression
+
+- **Modes:** Survival (20 waves → final boss), **Endless**, **Boss Rush**,
+  **Blitz** (3-min score attack), and **Sandbox** (no death, full arsenal).
+- **Progression (persistent):** earn **credits + XP** every run, **level up**,
+  and spend credits in the **meta-upgrade shop** (hull, munitions, autoloader,
+  engine, spare crew, etc.) for permanent boosts applied at run start. A
+  **Profile** screen tracks level, lifetime stats, and per-mode bests.
+- **Local co-op (2P):** play with a friend — P1 keyboard/mouse, P2 gamepad or
+  keyboard (auto-aim). Shared lives, shared perk drafts, fit-to-screen camera.
+
+## 🌐 Architecture (built to go online)
+
+The simulation is **input-agnostic**: each player owns a `command` object
+(`move / aim / fire / dash / shock / ult / weapon`) and the game logic *only*
+reads commands — it never touches the keyboard/mouse directly. A **controller**
+fills each player's command every frame:
+
+```
+LocalController     keyboard + mouse + touch (player 1)
+GamepadController   a gamepad            (co-op player 2)
+KeyboardP2Controller arrows + auto-aim   (co-op player 2 fallback)
+```
+
+To add **online multiplayer**, drop in a `NetworkController` that fills a
+remote player's command from the network (and send the local command out).
+The N-player paths (`alivePlayers()`, `nearestPlayer()`, shared lives, centroid
+camera) are already generalized, so co-op proves the model end-to-end.
+
 ## 🙌 Credits
 
 - **Original "Tank's Alot" prototype:** the TCSS-491 *Computational Worlds* team
